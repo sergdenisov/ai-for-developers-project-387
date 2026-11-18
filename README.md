@@ -397,7 +397,12 @@ docs: describe commit conventions
 
 release-please открывает PR токеном Actions, поэтому в Settings → Actions → General включено «Allow GitHub Actions to
 create and approve pull requests». Без него он готовит ветку и падает на создании PR; после включения неуспешный запуск
-повторяют. Такой PR не запускает `check.yml` сам: если проверки release PR ждут подтверждения, их запускает человек.
+повторяют. Если проверки release PR ждут подтверждения запуска, их запускает человек.
+
+`main` защищён правилом «main: CI must pass» (Settings → Rules): PR не смержить, пока не прошла проверка `check` из
+`check.yml`, исключений ни для кого нет. Тесты Хекслета (`build`, `hexlet-check.yml`) в правило не входят: они
+запускаются только на push, а release-please пушит свою ветку токеном Actions, и такой push воркфлоу не запускает, так
+что release PR никогда бы не получил `build` и остался бы заблокирован. Решение о мерже остаётся за человеком.
 
 В журнал попадают `feat`, `fix`, `perf` и `revert`, остальные типы скрыты. До `1.0.0` ломающее изменение повышает
 minor-версию, а не major. Первая версия — `0.1.0` (`initial-version` в `release-please-config.json`). Настройки
