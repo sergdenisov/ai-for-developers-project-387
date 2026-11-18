@@ -140,10 +140,30 @@ Actions, а ответ появляется комментарием от име
 | Воркфлоу                                                       | Событие                                                                                | Модель                                                                | Назначение                                                                      | Где результат                                                                                                                                                                                       |
 | -------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`opencode.yml`](.github/workflows/opencode.yml) | новый комментарий с `/oc` или `/opencode` в issue, PR или к строке diff (`issue_comment`, `pull_request_review_comment`, `types: [created]`) | `opencode/deepseek-v4.1-flash` ([OpenCode Zen](https://opencode.ai/docs/zen/)) | ответить на вопрос, запустить скилл, поправить PR или открыть PR по issue | ответ — комментарий `opencode-agent[bot]` в том же обсуждении со ссылкой на прогон; правки — коммиты в ветку PR или новый PR; прогон — [Actions → opencode](https://github.com/sergdenisov/ai-for-developers-project-387/actions?query=workflow%3Aopencode) |
+| [`opencode-triage.yml`](.github/workflows/opencode-triage.yml) | новое issue от доверенного автора без метки состояния (`issues`, `types: [opened]`) | `opencode/deepseek-v4.1-flash` ([OpenCode Zen](https://opencode.ai/docs/zen/)) | первый разбор по скиллу `triage`: что уже умеет приложение, метки категории и состояния, вопросы при нехватке данных | комментарий `opencode-agent[bot]` в issue с рекомендацией или вопросами; прогон — [Actions → opencode-triage](https://github.com/sergdenisov/ai-for-developers-project-387/actions?query=workflow%3Aopencode-triage) |
 
 Как вызвать: напишите комментарий, например `/oc explain this issue` или
 `/oc запусти скилл to-spec по обсуждению этого issue`. Вопросы и решения остаются в обсуждении, поэтому следующая
 сессия читает их перед работой.
+
+### Автотриаж новых обращений
+
+`opencode-triage.yml` разбирает новое обращение сразу после создания. Агент по скиллу `triage` смотрит, что уже умеет
+приложение, ставит одну метку категории (`bug` или `enhancement`) и одну метку состояния: `needs-info`, если данных не
+хватает, иначе `needs-triage`. В комментарии он даёт рекомендацию или, для `needs-info`, конкретные вопросы шаблоном
+Triage Notes. Код агент не меняет, issue не закрывает и `ready-for-agent` не ставит: взять задачу в работу решает
+человек.
+
+Задание отсеивает всё лишнее до вызова модели: обращение от бота, от автора без прав (`OWNER`, `MEMBER`,
+`COLLABORATOR` по `author_association`) и с любой меткой состояния из `docs/agents/triage-labels.md` (`needs-triage`,
+`needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). Спецификации и тикеты `to-spec`/`to-tickets` приходят от
+`opencode-agent[bot]` уже с `ready-for-agent`, поэтому пропускаются. Задание ограничено 15 минутами, `concurrency` —
+по номеру issue.
+
+Этот воркфлоу написал агент по [#18](https://github.com/sergdenisov/ai-for-developers-project-387/issues/18), но
+запушить его не смог: GitHub не даёт GitHub App менять `.github/workflows/` без права `workflows`, а у приложения
+`opencode-agent` его нет, и выдать его может только владелец приложения. Поэтому изменения воркфлоу агент готовит, а
+пушит человек или локальный агент; здесь его правки восстановлены из лога прогона.
 
 ### Скиллы из комментария
 

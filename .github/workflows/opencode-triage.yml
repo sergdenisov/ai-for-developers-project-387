@@ -1,0 +1,144 @@
+name: opencode-triage
+
+# A new issue from a trusted person gets a first triage pass: the OpenCode agent, acting as the GitHub App
+# (https://github.com/apps/opencode-agent), checks what the app already does, applies the category and state labels and
+# leaves a recommendation. It never takes the issue into work: `ready-for-agent` is a human decision. README.md,
+# "Агент в GitHub", describes the setup.
+on:
+  issues:
+    # An edited issue is not triaged again.
+    types: [opened]
+
+permissions: {}
+
+# One triage per issue; a rerun of the same issue waits instead of racing the first one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    # Runs before the model is called. Only a trusted person's issue (owner, member, collaborator; never a bot) without
+    # a state label goes further. Specs and tickets from to-spec and to-tickets already carry `ready-for-agent` and
+    # come from opencode-agent[bot], so they are skipped, as are issues a human has already triaged.
+    if: >-
+      github.event.issue.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association) &&
+      !contains(github.event.issue.labels.*.name, 'needs-triage') &&
+      !contains(github.event.issue.labels.*.name, 'needs-info') &&
+      !contains(github.event.issue.labels.*.name, 'ready-for-agent') &&
+      !contains(github.event.issue.labels.*.name, 'ready-for-human') &&
+      !contains(github.event.issue.labels.*.name, 'wontfix')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # Checkout; the agent writes through the GitHub App token, not this one.
+      contents: read
+      # The OIDC token that is exchanged for the GitHub App token.
+      id-token: write
+    env:
+      # mise-action would run the postinstall hook (`mise run install`); the agent runs it when it needs checks.
+      MISE_NO_HOOKS: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The tools from mise.toml, so the agent can explore the codebase and run the commands in AGENTS.md if a bug
+      # report needs reproducing.
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: 2026.10.21
+
+      # Locally the skills come from the Claude Code plugin mattpocock-skills (README.md, "Агенты"), outside the
+      # repository. Install the same release, pinned to its commit, as global OpenCode skills; outside the
+      # workspace, so the agent never commits them.
+      - name: Install the mattpocock-skills skills
+        shell: bash
+        env:
+          SKILLS_REPO: mattpocock/skills
+          # mattpocock-skills 1.3.1, the version of the plugin.
+          SKILLS_SHA: 49dd158d1076134a641b33efb035946536778336
+        run: |
+          src="$RUNNER_TEMP/skills"
+          dest="$HOME/.config/opencode/skills"
+          mkdir -p "$src" "$dest"
+          curl -fsSL "https://codeload.github.com/$SKILLS_REPO/tar.gz/$SKILLS_SHA" | tar -xz -C "$src" --strip-components=1
+          # The plugin manifest lists the skills it ships.
+          jq -r '.skills[]' "$src/.claude-plugin/plugin.json" | while read -r skill; do
+            cp -R "$src/$skill" "$dest/"
+          done
+          for skill in triage; do
+            test -f "$dest/$skill/SKILL.md"
+          done
+          ls "$dest"
+
+      # `gh` for the agent (docs/agents/issue-tracker.md) acts as the GitHub App, like its comments: labels and the
+      # triage comment come from opencode-agent[bot]. The exchange is the one the action makes itself
+      # (oidc_base_url), for a token of its own; the last step revokes it.
+      - name: Get a GitHub App token for gh
+        id: app-token
+        shell: bash
+        env:
+          OIDC_AUDIENCE: opencode-github-action
+          EXCHANGE_URL: https://api.opencode.ai/exchange_github_app_token
+        run: |
+          oidc=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$OIDC_AUDIENCE" | jq -er .value)
+          echo "::add-mask::$oidc"
+          token=$(curl -fsS -X POST -H "Authorization: Bearer $oidc" "$EXCHANGE_URL" | jq -er .token)
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      # The steps of the action anomalyco/opencode/github, run here with a pinned and verified OpenCode. The action asks
+      # the GitHub API for the latest release without a token, and on a shared runner that call fails often enough to
+      # break a run before the agent starts; it would also install whatever OpenCode was released last.
+      - name: Install OpenCode
+        shell: bash
+        env:
+          OPENCODE_VERSION: 1.19.6
+          # The digest GitHub lists for the opencode-linux-x64.tar.gz asset of that release.
+          OPENCODE_SHA256: 47734e08968b30cc22a0bffb6d9feeed76ad4aa743213a12122040392d09a057
+        run: |
+          archive="$RUNNER_TEMP/opencode.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/anomalyco/opencode/releases/download/v$OPENCODE_VERSION/opencode-linux-x64.tar.gz"
+          echo "$OPENCODE_SHA256  $archive" | sha256sum -c -
+          mkdir -p "$HOME/.opencode/bin"
+          tar -xzf "$archive" -C "$HOME/.opencode/bin" opencode
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+          "$HOME/.opencode/bin/opencode" --version
+
+      - name: Run OpenCode
+        run: opencode github run
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          # Nobody answers a permission prompt on the runner: an `ask` waits until the timeout. Give an answer to every
+          # rule OpenCode 1.19 asks by default. Paths outside the checkout (/tmp and the like) are allowed, as the shell
+          # already reaches them; a doom loop and .env files are denied.
+          OPENCODE_PERMISSION: >-
+            {"external_directory": "allow", "doom_loop": "deny", "read": {"*.env": "deny", "*.env.*": "deny"}}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # OpenCode Zen, which the OPENCODE_API_KEY key pays for. The same model as opencode.yml.
+          MODEL: opencode/deepseek-v4.1-flash
+          # Sessions are not published: the repository is public and a session holds the issue's context.
+          SHARE: false
+          # The issues event has no comment to take the instruction from, so the prompt is required here. It overrides
+          # the triage skill where the skill would wait for the maintainer: this pass runs unattended.
+          PROMPT: >-
+            Triage this newly opened issue with the `triage` skill, following docs/agents/triage-labels.md. This is a
+            first pass, not a decision to start work: do not change code or files, do not open a PR, do not close the
+            issue, and do not wait for the maintainer. Check whether the app already implements the request and say
+            where you looked. Apply exactly one category label (`bug` or `enhancement`) and exactly one state label
+            with `gh issue edit`: `needs-info` when the issue lacks what is needed to act, otherwise `needs-triage`.
+            Never apply `ready-for-agent`, `ready-for-human` or `wontfix`; a human decides those. Put the
+            recommendation, or for `needs-info` the skill's "Triage Notes" with specific, actionable questions for the
+            reporter, in your final message: OpenCode posts it as the issue comment, so do not post another comment
+            with `gh`. Start that message with `> *This was generated by AI during triage.*`. If verifying a bug would
+            need running the app, note that in the recommendation instead of doing it.
+
+      - name: Revoke the GitHub App token of gh
+        if: always() && steps.app-token.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh api --method DELETE /installation/token
