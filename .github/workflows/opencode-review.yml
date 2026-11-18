@@ -168,7 +168,14 @@ jobs:
             jq -rs 'reduce .[] as $e ([]; if $e.type == "step_start" then [] elif $e.type == "text"
               then . + [$e.part.text] else . end) | join("\n\n")' "$1"
           }
-          last_text "$RUNNER_TEMP/events.jsonl" > "$RUNNER_TEMP/review/review.md"
+          # A review is the text of a last step that finished on its own (`stop`); a preamble beside a tool call or a
+          # text cut off by the output cap is not one.
+          review_of() {
+            if [ "$(jq -r 'select(.type == "step_finish") | .part.reason' "$1" | tail -n 1)" = stop ]; then
+              last_text "$1"
+            fi
+          }
+          review_of "$RUNNER_TEMP/events.jsonl" > "$RUNNER_TEMP/review/review.md"
           jq -r 'select(.type == "step_finish") | .part.reason' "$RUNNER_TEMP/events.jsonl" | tail -n 1 \
             | sed 's/^/last step finished: /' || true
           # Once: the same session, asked to write the review from what it has already read.
@@ -179,7 +186,7 @@ jobs:
               > "$RUNNER_TEMP/events-continue.jsonl"
             code=$?
             cat "$RUNNER_TEMP/events-continue.jsonl" >> "$RUNNER_TEMP/events.jsonl"
-            last_text "$RUNNER_TEMP/events-continue.jsonl" > "$RUNNER_TEMP/review/review.md"
+            review_of "$RUNNER_TEMP/events-continue.jsonl" > "$RUNNER_TEMP/review/review.md"
           fi
           echo "exit-code=$code" >> "$GITHUB_OUTPUT"
           # What the session did, for the log: event types, tools with their status, errors. The events themselves
@@ -243,7 +250,8 @@ jobs:
             else
               # No review: the reason, for a person to decide what next.
               # No exit code after the start: the job's own time limit stopped the reviewer.
-              if [ "$STARTED" != true ]; then
+              # Exit code 0 with no review posted: the review was written, a later step (the artifact) failed.
+              if [ "$STARTED" != true ] || [ "$EXIT_CODE" = 0 ]; then
                 reason=infra
               elif [ -z "$EXIT_CODE" ] || [ "$EXIT_CODE" = 124 ]; then
                 reason=timeout

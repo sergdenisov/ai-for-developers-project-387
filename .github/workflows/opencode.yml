@@ -60,7 +60,9 @@ jobs:
           BUDGET: 3
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
-          DEFAULT_SHA: ${{ github.sha }}
+          ISSUE_SHA: ${{ github.sha }}
+          # The head of a PR on a line comment; on a PR conversation comment the head is known only from the API.
+          EVENT_PR_HEAD: ${{ github.event.pull_request.head.sha }}
           # Set on a comment in the PR conversation (issue_comment); empty on an issue.
           ISSUE_PR_URL: ${{ github.event.issue.pull_request.url }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -75,11 +77,13 @@ jobs:
             pr=""
           fi
           if [ -z "$pr" ]; then
-            echo "sha=$DEFAULT_SHA" >> "$GITHUB_OUTPUT"
+            echo "sha=$ISSUE_SHA" >> "$GITHUB_OUTPUT"
             echo "allowed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          # Known before the API call, so a report of a gate that fails below names the right commit or none.
+          echo "sha=${EVENT_PR_HEAD:-unknown}" >> "$GITHUB_OUTPUT"
           read -r head_repo sha created < <(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" \
             --jq '"\(.head.repo.full_name) \(.head.sha) \(.created_at)"')
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
@@ -271,7 +275,7 @@ jobs:
           GATE_RESULT: ${{ needs.gate.result }}
           GATE_REASON: ${{ needs.gate.outputs.reason }}
           USED: ${{ needs.gate.outputs.used }}
-          SHA: ${{ needs.gate.outputs.sha || github.sha }}
+          SHA: ${{ needs.gate.outputs.sha || 'unknown' }}
           STARTED: ${{ needs.opencode.outputs.started }}
           EXIT_CODE: ${{ needs.opencode.outputs.exit-code }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
