@@ -55,3 +55,5 @@ use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
 > _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+
+<!-- Учебный PR для демонстрации предела запусков агента; не мержить. -->
