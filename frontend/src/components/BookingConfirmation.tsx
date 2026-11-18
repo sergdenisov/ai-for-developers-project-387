@@ -27,9 +27,6 @@ export function BookingConfirmation({
         <Text fw={500}>{booking.eventType.name}</Text>
         <Text>{formatSlot(booking, timeZone)}</Text>
         <Text c="dimmed">{formatDuration(durationMinutes)}</Text>
-        {booking.note !== undefined && (
-          <Text style={{ whiteSpace: 'pre-wrap' }}>{booking.note}</Text>
-        )}
       </Stack>
       <Button onClick={onBookAnother}>Записаться ещё</Button>
     </Stack>

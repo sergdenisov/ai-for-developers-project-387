@@ -9,8 +9,6 @@ export type StoredBooking = Period & {
   id: string;
   eventType: { id: string; name: string };
   guest: Guest;
-  /** What the Guest wants to discuss; absent when the Guest left no note. */
-  note?: string;
   createdAt: Date;
 };
 
@@ -22,27 +20,20 @@ export type BookOutcome =
   | { kind: 'conflict'; code: 'SLOT_STARTED' | 'SLOT_UNAVAILABLE'; message: string };
 
 /**
- * Trims the Guest's name and email and the top-level note in a raw `createBooking` body, in place. The contract
- * checks their length and format after trimming, so this runs before the request is validated; anything that is not
- * a string is left for the validation to report.
+ * Trims the Guest's name and email in a raw `createBooking` body, in place. The contract checks their length and
+ * format after trimming, so this runs before the request is validated; anything that is not a string is left for
+ * the validation to report.
  */
-export function trimBooking(body: unknown) {
-  if (typeof body !== 'object' || body === null) {
-    return;
-  }
-  const fields = body as Record<string, unknown>;
-  if (typeof fields.note === 'string') {
-    fields.note = fields.note.trim();
-  }
-  const guest = fields.guest;
+export function trimGuest(body: unknown) {
+  const guest = (body as { guest?: unknown } | null)?.guest;
   if (typeof guest !== 'object' || guest === null) {
     return;
   }
-  const guestFields = guest as Record<string, unknown>;
+  const fields = guest as Record<string, unknown>;
   for (const field of ['name', 'email']) {
-    const value = guestFields[field];
+    const value = fields[field];
     if (typeof value === 'string') {
-      guestFields[field] = value.trim();
+      fields[field] = value.trim();
     }
   }
 }
@@ -79,13 +70,11 @@ export function createBookingStore() {
       eventType,
       startsAt,
       guest,
-      note,
       now,
     }: {
       eventType: EventType;
       startsAt: Date;
       guest: Guest;
-      note?: string;
       now: Date;
     }): BookOutcome {
       const check = checkBooking({
@@ -123,10 +112,6 @@ export function createBookingStore() {
         guest,
         createdAt: now,
       };
-      // A blank note means there is none; the field is then absent, never null or an empty string.
-      if (note !== undefined && note.trim() !== '') {
-        booking.note = note;
-      }
       bookings.push(booking);
       return { kind: 'booked', booking };
     },

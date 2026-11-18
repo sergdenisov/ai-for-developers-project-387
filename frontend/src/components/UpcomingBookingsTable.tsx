@@ -37,7 +37,6 @@ export function UpcomingBookingsTable({
             <Table.Th>Дата и время, {zone}</Table.Th>
             <Table.Th>Тип события</Table.Th>
             <Table.Th>Гость</Table.Th>
-            <Table.Th>О чём звонок</Table.Th>
             <Table.Th>Email</Table.Th>
             <Table.Th>Создана, {zone}</Table.Th>
           </Table.Tr>
@@ -48,7 +47,6 @@ export function UpcomingBookingsTable({
               <Table.Td>{formatShortSlot(booking, timeZone)}</Table.Td>
               <Table.Td>{booking.eventType.name}</Table.Td>
               <Table.Td>{booking.guest.name}</Table.Td>
-              <Table.Td style={{ whiteSpace: 'pre-wrap' }}>{booking.note ?? '—'}</Table.Td>
               <Table.Td>{booking.guest.email}</Table.Td>
               <Table.Td>{formatShortMoment(booking.createdAt, timeZone)}</Table.Td>
             </Table.Tr>
