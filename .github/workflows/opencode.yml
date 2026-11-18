@@ -120,9 +120,9 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         with:
-          # OpenCode Zen, which the OPENCODE_API_KEY key pays for. DeepSeek's strongest model there, cheaper than
-          # Claude Sonnet.
-          model: opencode/deepseek-v4-pro
+          # OpenCode Zen, which the OPENCODE_API_KEY key pays for. DeepSeek's newest model there, much cheaper than
+          # DeepSeek V4 Pro and Claude Sonnet.
+          model: opencode/deepseek-v4.1-flash
           # The default commands, stated so the README and the `if` of the gate job stay in step with them.
           mentions: /oc,/opencode
           # Sessions are not published: the repository is public and a session holds the task's context.

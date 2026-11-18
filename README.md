@@ -139,7 +139,7 @@ Actions, а ответ появляется комментарием от име
 
 | Воркфлоу                                                       | Событие                                                                                | Модель                                                                | Назначение                                                                      | Где результат                                                                                                                                                                                       |
 | -------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`opencode.yml`](.github/workflows/opencode.yml) | новый комментарий с `/oc` или `/opencode` в issue, PR или к строке diff (`issue_comment`, `pull_request_review_comment`, `types: [created]`) | `opencode/deepseek-v4-pro` ([OpenCode Zen](https://opencode.ai/docs/zen/)) | ответить на вопрос, запустить скилл, поправить PR или открыть PR по issue | ответ — комментарий `opencode-agent[bot]` в том же обсуждении со ссылкой на прогон; правки — коммиты в ветку PR или новый PR; прогон — [Actions → opencode](https://github.com/sergdenisov/ai-for-developers-project-387/actions?query=workflow%3Aopencode) |
+| [`opencode.yml`](.github/workflows/opencode.yml) | новый комментарий с `/oc` или `/opencode` в issue, PR или к строке diff (`issue_comment`, `pull_request_review_comment`, `types: [created]`) | `opencode/deepseek-v4.1-flash` ([OpenCode Zen](https://opencode.ai/docs/zen/)) | ответить на вопрос, запустить скилл, поправить PR или открыть PR по issue | ответ — комментарий `opencode-agent[bot]` в том же обсуждении со ссылкой на прогон; правки — коммиты в ветку PR или новый PR; прогон — [Actions → opencode](https://github.com/sergdenisov/ai-for-developers-project-387/actions?query=workflow%3Aopencode) |
 
 Как вызвать: напишите комментарий, например `/oc explain this issue` или
 `/oc запусти скилл to-spec по обсуждению этого issue`. Вопросы и решения остаются в обсуждении, поэтому следующая
@@ -162,8 +162,8 @@ Actions, а ответ появляется комментарием от име
   команды `gh` заводит и правит issues (`issues: write`): скиллы `to-spec` и `to-tickets` публикуют спецификацию и
   тикеты сами, с метками, подзадачами и блокировками. PR этот токен только читает (`pull-requests: read`). Issues,
   заведённые через него, подписаны `github-actions[bot]`.
-- **Модель:** `deepseek-v4-pro` — самая сильная модель DeepSeek в Zen: $1.74 за 1M входных токенов и $3.48 за 1M
-  выходных, заметно дешевле Claude Sonnet ($2/$10). Цены — на [странице Zen](https://opencode.ai/docs/zen/).
+- **Модель:** `deepseek-v4.1-flash` — самая новая модель DeepSeek в Zen: $0.30 за 1M входных токенов и $1.20 за 1M
+  выходных, дешевле DeepSeek V4 Pro ($1.74/$3.48) и Claude Sonnet ($2/$10). Цены — на [странице Zen](https://opencode.ai/docs/zen/).
 - **Остановка:** тайм-аут задания с агентом — 30 минут, задания `gate` — 5. `concurrency` по номеру issue или PR
   запускает одного агента на обсуждение, а следующие команды ждут в очереди (`queue: max`). Текущий прогон
   останавливает Cancel workflow, будущие — Disable workflow на странице воркфлоу. Уже отправленный запрос провайдер
