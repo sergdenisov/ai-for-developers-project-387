@@ -66,9 +66,12 @@ Vite, Mantine) are separate npm packages; the root `package.json` holds reposito
 ## GitHub Actions
 
 `.github/workflows/opencode.yml` runs OpenCode on a `/oc` or `/opencode` comment; your final message becomes the reply
-comment. On that runner:
+comment. `.github/workflows/opencode-triage.yml` triages a new issue automatically (labels and a comment, no code
+changes). On those runners:
 
 - `mise` tools are installed, npm dependencies are not: run `mise run install` before any check.
+- A push that touches `.github/workflows/` is rejected: the app has no `workflows` permission. Put such a change in your
+  reply as a diff; a person applies it.
 - `gh` acts as the `opencode-agent` app: file issues (labels, sub-issues, blockers) and open PRs with it; `check.yml`
   runs on them.
 
