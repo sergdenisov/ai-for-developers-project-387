@@ -1,0 +1,192 @@
+name: opencode-review
+
+# An independent review of every pull request: the plain OpenCode CLI reads the PR, the spec and tickets it links, the
+# diff and the CI results against the criteria in REVIEW.md, and a separate job posts its text as a PR comment. The
+# reviewer runs in a session of its own, not the one that wrote the code; it never changes code, and a person decides
+# what to do with each finding (a `/oc` command for the author, opencode.yml). README.md, "Авторевью", describes it.
+#
+# The plain CLI, not `opencode github run`: that handler checks the sender's repository permission, which is `none`
+# for the GitHub App that opens the agent's PRs, and would stop the review of exactly those PRs. The trusted author and
+# branch are checked here instead, and the model gets a read-only token.
+on:
+  pull_request:
+    # `synchronize` is a push to the PR; a draft is reviewed once it is ready.
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+# A push makes the review of the previous head outdated: cancel it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Before the model is called. A branch of this repository (a fork never gets the model key), not a draft, opened by
+    # a trusted person or by the agent's GitHub App. Bots are not filtered by type: the agent's own PRs need a review
+    # too; dependabot and release-please PRs are not in the list.
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) ||
+      github.event.pull_request.user.login == 'opencode-agent[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      # The code of the reviewed head.
+      contents: read
+      # The request, the spec, the tickets and the approval the PR links.
+      issues: read
+      # The PR, its diff and earlier review comments; the reviewer cannot comment, the publish job does.
+      pull-requests: read
+      # CI results of the reviewed head.
+      actions: read
+      checks: read
+      statuses: read
+    outputs:
+      exit-code: ${{ steps.review.outputs.exit-code }}
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      # The author's head, not the temporary merge commit `pull_request` checks out by default.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Record the reviewed SHA
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/review"
+          git rev-parse HEAD | tee "$RUNNER_TEMP/review/sha.txt"
+
+      # Same pinned and verified OpenCode as opencode.yml.
+      - name: Install OpenCode
+        shell: bash
+        env:
+          OPENCODE_VERSION: 1.19.6
+          OPENCODE_SHA256: 47734e08968b30cc22a0bffb6d9feeed76ad4aa743213a12122040392d09a057
+        run: |
+          archive="$RUNNER_TEMP/opencode.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/anomalyco/opencode/releases/download/v$OPENCODE_VERSION/opencode-linux-x64.tar.gz"
+          echo "$OPENCODE_SHA256  $archive" | sha256sum -c -
+          mkdir -p "$HOME/.opencode/bin"
+          tar -xzf "$archive" -C "$HOME/.opencode/bin" opencode
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+      # The review reads CI results, so it waits for check.yml on this head (15 minutes at most) and passes the state
+      # of every check to the reviewer. Checks that are still running are reported as such.
+      - name: Wait for CI of the head
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 1 60); do
+            status=$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$HEAD_SHA" --workflow check.yml \
+              --json status --jq '.[0].status // "missing"')
+            [ "$status" = completed ] && break
+            sleep 15
+          done
+          {
+            echo "CI of $HEAD_SHA (gh pr checks):"
+            gh pr checks "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" || true
+          } | tee "$RUNNER_TEMP/review/ci.txt"
+
+      - name: Review
+        shell: bash
+        id: review
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          # Read-only token for `gh`: the reviewer reads the PR, issues and CI, and cannot write anything.
+          GH_TOKEN: ${{ github.token }}
+          MODEL: opencode/deepseek-v4.1-flash
+          # The reviewer never edits files and runs only read commands; whatever else it asks is refused (the CLI
+          # rejects any `ask` on its own). The last matching rule wins.
+          OPENCODE_PERMISSION: >-
+            {"edit": "deny", "webfetch": "deny", "doom_loop": "deny", "external_directory": "deny",
+            "read": {"*.env": "deny", "*.env.*": "deny"},
+            "bash": {"*": "deny", "gh pr view *": "allow", "gh pr diff *": "allow", "gh pr checks *": "allow",
+            "gh issue view *": "allow", "gh run view *": "allow", "gh run list *": "allow",
+            "git log *": "allow", "git show *": "allow", "git rev-parse *": "allow", "ls *": "allow",
+            "cat *": "allow", "grep *": "allow", "rg *": "allow", "head *": "allow", "tail *": "allow",
+            "wc *": "allow", "sed -n *": "allow"}}
+          PROMPT: >-
+            You are an independent reviewer of pull request #${{ github.event.pull_request.number }} in this repository,
+            at head SHA ${{ github.event.pull_request.head.sha }}, checked out in the working directory. You did not
+            write this code. The attached REVIEW.md holds the review criteria and the report format: follow it. The
+            attached ci.txt holds the CI state of this head. Read the PR with `gh pr view <n> --comments` and
+            `gh pr diff <n>`, then the request, spec, tickets and approval it links with `gh issue view`, and the code
+            around the change. Do not change any file. Reply with the review only, in Russian Markdown, as your final
+            message; it is posted as the PR comment as is.
+        run: |
+          set +e
+          timeout 20m opencode run --model "$MODEL" --format json \
+            --file REVIEW.md --file "$RUNNER_TEMP/review/ci.txt" -- "$PROMPT" > "$RUNNER_TEMP/review/events.jsonl"
+          code=$?
+          echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+          # The final message is the last text part of the session.
+          jq -rs '[.[] | select(.type == "text") | .part.text] | last // empty' "$RUNNER_TEMP/review/events.jsonl" \
+            > "$RUNNER_TEMP/review/review.md"
+          if [ "$code" -eq 0 ] && [ ! -s "$RUNNER_TEMP/review/review.md" ]; then
+            echo "::error::The reviewer finished without a review."
+            code=1
+          fi
+          exit "$code"
+
+      - name: Keep the review
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: review
+          path: ${{ runner.temp }}/review/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Without the model: posts the review, or why there is none, as a PR comment.
+  publish:
+    needs: review
+    if: always() && needs.review.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: review
+          path: review
+
+      - name: Post the review
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RESULT: ${{ needs.review.result }}
+          EXIT_CODE: ${{ needs.review.outputs.exit-code }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          body="$RUNNER_TEMP/comment.md"
+          {
+            echo "### Авторевью \`${HEAD_SHA:0:7}\`"
+            echo
+            if [ "$RESULT" = success ] && [ -s review/review.md ]; then
+              cat review/review.md
+            else
+              # No review: the reason, for a person to decide what next.
+              case "$EXIT_CODE" in
+                '') reason=infra ;;
+                124) reason=timeout ;;
+                *) reason=agent_failed ;;
+              esac
+              echo "Ревью не получилось, **нужен человек**. Причина: \`$reason\`, SHA \`$HEAD_SHA\`."
+            fi
+            echo
+            echo "<sub>Независимый ревьюер по [REVIEW.md]($REPO_URL/blob/$HEAD_SHA/REVIEW.md), [прогон]($RUN_URL). Исправления —"
+            echo "только по команде человека \`/oc\`.</sub>"
+          } > "$body"
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$body"

@@ -1,4 +1,8 @@
 name: opencode
+# The title names the PR or issue, so the gate can count the runs of one PR from the Actions history (the budget below).
+run-name: >-
+  ${{ format('opencode {0} #{1}', (github.event.issue.pull_request || github.event.pull_request) && 'PR' || 'issue',
+  github.event.issue.number || github.event.pull_request.number) }}
 
 # The OpenCode agent answers a `/oc` or `/opencode` command in a comment on an issue, a pull request or a line of
 # its diff. It acts as the OpenCode GitHub App (https://github.com/apps/opencode-agent): the app's token comes from
@@ -25,9 +29,10 @@ concurrency:
   queue: max
 
 jobs:
-  # Runs without secrets. Lets the agent job start only for a command from a trusted participant (owner, member,
-  # collaborator; never a bot, so the agent never answers itself) on an issue or on a PR from this repository.
-  # A PR from a fork is refused: the agent may run its code, and that code must not see the model key.
+  # Runs without secrets, before the model is called. Lets the agent job start only for a command from a trusted
+  # participant (owner, member, collaborator; never a bot, so the agent never answers itself), on an issue or on a PR
+  # from this repository, and on a PR only while its run budget lasts. A PR from a fork is refused: the agent may run
+  # its code, and that code must not see the model key.
   gate:
     if: >-
       github.event.comment.user.type != 'Bot' &&
@@ -38,38 +43,85 @@ jobs:
     timeout-minutes: 5
     permissions:
       pull-requests: read
+      # The history of this workflow's runs: the budget is counted from it.
+      actions: read
     outputs:
-      allowed: ${{ steps.source.outputs.allowed }}
+      allowed: ${{ steps.decide.outputs.allowed }}
+      reason: ${{ steps.decide.outputs.reason }}
+      sha: ${{ steps.decide.outputs.sha }}
+      used: ${{ steps.decide.outputs.used }}
     steps:
-      - name: Refuse pull requests from forks
-        id: source
+      - name: Decide whether the agent may run
+        shell: bash
+        id: decide
         env:
           GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
+          # Agent runs one PR may have; the next command is refused without calling the model.
+          BUDGET: 3
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          DEFAULT_SHA: ${{ github.sha }}
           # Set on a comment in the PR conversation (issue_comment); empty on an issue.
           ISSUE_PR_URL: ${{ github.event.issue.pull_request.url }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
           # Set on a comment on a line of the diff (pull_request_review_comment).
-          REVIEW_PR_HEAD: ${{ github.event.pull_request.head.repo.full_name }}
+          REVIEW_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if [ -n "$REVIEW_PR_HEAD" ]; then
-            head="$REVIEW_PR_HEAD"
+          if [ -n "$REVIEW_PR_NUMBER" ]; then
+            pr="$REVIEW_PR_NUMBER"
           elif [ -n "$ISSUE_PR_URL" ]; then
-            head=$(gh api "$ISSUE_PR_URL" --jq '.head.repo.full_name')
+            pr="$ISSUE_NUMBER"
           else
-            head="$REPOSITORY"
+            pr=""
           fi
-          if [ "$head" = "$REPOSITORY" ]; then
+          if [ -z "$pr" ]; then
+            echo "sha=$DEFAULT_SHA" >> "$GITHUB_OUTPUT"
             echo "allowed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::The agent does not run on pull requests from forks ($head)."
+            exit 0
+          fi
+
+          read -r head_repo sha created < <(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" \
+            --jq '"\(.head.repo.full_name) \(.head.sha) \(.created_at)"')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
+            echo "::notice::The agent does not run on pull requests from forks ($head_repo)."
             echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "reason=fork" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Every admitted run of this PR counts: an agent job that was not skipped, whatever its result (a cancel, a
+          # timeout and every Re-run attempt included), except this attempt itself. The history lives in Actions,
+          # which the agent's token cannot rewrite; a comment is only a report.
+          used=0
+          for id in $(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/opencode.yml/runs?per_page=100&created=>=$created" \
+            --jq ".workflow_runs[] | select(.display_title == \"opencode PR #$pr\") | .id"); do
+            n=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?filter=all&per_page=100" \
+              --jq "[.jobs[] | select(.name == \"opencode\" and .conclusion != \"skipped\"
+                and (.run_id != $RUN_ID or .run_attempt != $RUN_ATTEMPT))] | length" | awk '{ s += $1 } END { print s + 0 }')
+            used=$((used + n))
+          done
+          echo "used=$used" >> "$GITHUB_OUTPUT"
+          echo "Agent runs of PR #$pr: $used of $BUDGET."
+          if [ "$used" -ge "$BUDGET" ]; then
+            echo "::warning::The run budget of PR #$pr is spent ($used of $BUDGET): the model is not called."
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "reason=limit_exhausted" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
           fi
 
   opencode:
     needs: gate
     if: needs.gate.outputs.allowed == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # implement-spec runs a whole graph of tickets in one session. The agent itself stops at 55 minutes (`timeout` in
+    # Run OpenCode), so that its exit code tells a timeout apart from other failures for the report job.
+    timeout-minutes: 60
+    outputs:
+      started: ${{ steps.start.outputs.started }}
+      exit-code: ${{ steps.agent.outputs.exit-code }}
     permissions:
       # Checkout; the agent writes through the GitHub App token, not this one.
       contents: read
@@ -148,8 +200,29 @@ jobs:
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
           "$HOME/.opencode/bin/opencode" --version
 
+      - name: Check the model key
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        run: |
+          if [ -z "$OPENCODE_API_KEY" ]; then
+            echo "::error::The OPENCODE_API_KEY secret is not set."
+            exit 1
+          fi
+
+      # Everything before this step is preparation: a failure there is `infra` in the report.
+      - name: Mark the agent start
+        id: start
+        run: echo "started=true" >> "$GITHUB_OUTPUT"
+
       - name: Run OpenCode
-        run: opencode github run
+        shell: bash
+        id: agent
+        run: |
+          set +e
+          timeout 55m opencode github run
+          code=$?
+          echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           # Nobody answers a permission prompt on the runner: an `ask` waits until the timeout. Give an answer to every
@@ -172,3 +245,50 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: gh api --method DELETE /installation/token
+
+  # Without the model, after the agent job has stopped: when the agent did not run or did not finish, says why in the
+  # issue or PR, with the SHA and the logs, so a person picks the next step. A successful agent replies itself.
+  report:
+    needs: [gate, opencode]
+    if: >-
+      always() && (needs.gate.outputs.reason == 'limit_exhausted' ||
+      needs.opencode.result == 'failure' || needs.opencode.result == 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Report why the agent did not finish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          GATE_REASON: ${{ needs.gate.outputs.reason }}
+          USED: ${{ needs.gate.outputs.used }}
+          SHA: ${{ needs.gate.outputs.sha }}
+          STARTED: ${{ needs.opencode.outputs.started }}
+          EXIT_CODE: ${{ needs.opencode.outputs.exit-code }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$GATE_REASON" = limit_exhausted ]; then
+            reason=limit_exhausted
+            detail="Бюджет запусков агента на этот PR исчерпан ($USED из 3), модель не вызывалась."
+          elif [ "$STARTED" != true ]; then
+            reason=infra
+            detail="Сбой подготовки до запуска агента: установка инструментов, токен или ключ модели."
+          elif [ "$EXIT_CODE" = 124 ]; then
+            reason=timeout
+            detail="Агент не уложился в 55 минут и был остановлен."
+          else
+            reason=agent_failed
+            detail="Агент завершился ошибкой или прогон остановлен (код \`${EXIT_CODE:-нет}\`); уточните по логу."
+          fi
+          body="$RUNNER_TEMP/report.md"
+          {
+            echo "**Нужен человек.** Причина: \`$reason\`. $detail"
+            echo
+            echo "- SHA: \`$SHA\`"
+            echo "- Логи: $RUN_URL"
+          } > "$body"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -F "body=@$body" > /dev/null

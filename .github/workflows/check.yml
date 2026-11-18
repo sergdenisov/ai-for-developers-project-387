@@ -77,3 +77,64 @@ jobs:
           path: frontend/playwright-report/
           if-no-files-found: ignore
           retention-days: 14
+
+  # The author's version of a PR, not the temporary merge commit `pull_request` checks out by default: the browser
+  # scenarios on the exact head SHA, with a trace and a screenshot of every test, kept as an artifact named by that SHA.
+  # A person compares the SHA with the PR's head before merging; a new push needs a new run. No model, no secrets.
+  e2e-head:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: 2026.10.21
+
+      - name: Read the Playwright version
+        id: playwright
+        run: >-
+          echo "version=$(node -p "require('./frontend/package-lock.json').packages['node_modules/playwright-core'].version")"
+          >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - run: mise run install
+
+      - name: Browser scenarios on the head
+        id: e2e
+        env:
+          E2E_TRACE: 'on'
+        run: mise run check:e2e
+
+      - name: Record the SHA and the result
+        if: always()
+        shell: bash
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          OUTCOME: ${{ steps.e2e.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p e2e-head
+          {
+            echo "checked: $(git rev-parse HEAD)"
+            echo "pr-head: $PR_HEAD"
+            echo "result: $OUTCOME"
+            echo "run: $RUN_URL"
+          } | tee e2e-head/result.txt
+          cp -R frontend/playwright-report frontend/test-results e2e-head/ 2>/dev/null || true
+
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-head-${{ github.event.pull_request.head.sha }}
+          path: e2e-head/
+          retention-days: 14
