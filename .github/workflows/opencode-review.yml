@@ -139,9 +139,9 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           MODEL: opencode/deepseek-v4.1-flash
-          # Reasoning effort. At the model's default a review once spent the whole 32k output cap of its last step on
-          # reasoning and gave no answer (finish reason `length`).
-          VARIANT: medium
+          # Reasoning effort. At the default and at `medium` the step that writes the review spent the whole 32k output
+          # cap on reasoning and gave no answer (finish reason `length`).
+          VARIANT: low
           # The reviewer reads files in the working directory and nothing else: no shell (it could print the
           # environment, the model key included), no edits, no web, nothing outside the directory. No GitHub token is
           # in its environment; everything it needs from GitHub was collected above.
@@ -162,14 +162,26 @@ jobs:
           timeout 20m opencode run --model "$MODEL" --variant "$VARIANT" --format json \
             --file "$criteria" --file "$INPUT/ci.txt" -- "$PROMPT" > "$RUNNER_TEMP/events.jsonl"
           code=$?
-          echo "exit-code=$code" >> "$GITHUB_OUTPUT"
           # The final message is the text of the session's last step; a last step cut off without text (a tool call,
           # or the output cap) leaves it empty, and an earlier "I'll start by reading…" is not a review.
-          jq -rs 'reduce .[] as $e ([]; if $e.type == "step_start" then [] elif $e.type == "text"
-            then . + [$e.part.text] else . end) | join("\n\n")' "$RUNNER_TEMP/events.jsonl" \
-            > "$RUNNER_TEMP/review/review.md"
+          last_text() {
+            jq -rs 'reduce .[] as $e ([]; if $e.type == "step_start" then [] elif $e.type == "text"
+              then . + [$e.part.text] else . end) | join("\n\n")' "$1"
+          }
+          last_text "$RUNNER_TEMP/events.jsonl" > "$RUNNER_TEMP/review/review.md"
           jq -r 'select(.type == "step_finish") | .part.reason' "$RUNNER_TEMP/events.jsonl" | tail -n 1 \
             | sed 's/^/last step finished: /' || true
+          # Once: the same session, asked to write the review from what it has already read.
+          if [ "$code" -eq 0 ] && [ -z "$(tr -d '[:space:]' < "$RUNNER_TEMP/review/review.md")" ]; then
+            echo "No review in the last step; asking the same session once more."
+            timeout 5m opencode run --continue --model "$MODEL" --variant "$VARIANT" --format json -- \
+              "Write the final review now from what you have already read, in the format REVIEW.md asks for. No more tool calls." \
+              > "$RUNNER_TEMP/events-continue.jsonl"
+            code=$?
+            cat "$RUNNER_TEMP/events-continue.jsonl" >> "$RUNNER_TEMP/events.jsonl"
+            last_text "$RUNNER_TEMP/events-continue.jsonl" > "$RUNNER_TEMP/review/review.md"
+          fi
+          echo "exit-code=$code" >> "$GITHUB_OUTPUT"
           # What the session did, for the log: event types, tools with their status, errors. The events themselves
           # (the PR's public content and the model's output; no secrets, the reviewer has no shell) go to the artifact.
           jq -rs 'group_by(.type) | map("\(.[0].type): \(length)") | join(", ")' "$RUNNER_TEMP/events.jsonl" || true
