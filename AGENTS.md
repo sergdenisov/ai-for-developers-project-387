@@ -69,7 +69,8 @@ Vite, Mantine) are separate npm packages; the root `package.json` holds reposito
 comment. On that runner:
 
 - `mise` tools are installed, npm dependencies are not: run `mise run install` before any check.
-- `gh` files and edits issues (labels, sub-issues, blockers) and reads PRs.
+- `gh` acts as the `opencode-agent` app: file issues (labels, sub-issues, blockers) and open PRs with it; `check.yml`
+  runs on them.
 
 ## Rules and exceptions
 
