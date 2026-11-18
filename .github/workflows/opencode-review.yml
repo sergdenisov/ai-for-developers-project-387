@@ -163,13 +163,19 @@ jobs:
           # The final message is the last text part of the session.
           jq -rs '[.[] | select(.type == "text") | .part.text] | last // empty' "$RUNNER_TEMP/events.jsonl" \
             > "$RUNNER_TEMP/review/review.md"
-          if [ "$criteria" != REVIEW.md ]; then
-            printf '\n> Критерии взяты из head этого PR: в базе ещё нет REVIEW.md.\n' >> "$RUNNER_TEMP/review/review.md"
-          fi
-          cp "$INPUT/ci.txt" "$RUNNER_TEMP/review/"
-          if [ "$code" -eq 0 ] && [ ! -s "$RUNNER_TEMP/review/review.md" ]; then
+          # What the session did, for the log: event types, tools with their status, errors. The events themselves
+          # (the PR's public content and the model's output; no secrets, the reviewer has no shell) go to the artifact.
+          jq -rs 'group_by(.type) | map("\(.[0].type): \(length)") | join(", ")' "$RUNNER_TEMP/events.jsonl" || true
+          jq -r 'select(.type == "tool_use") | "tool \(.part.tool): \(.part.state.status)"' \
+            "$RUNNER_TEMP/events.jsonl" | sort | uniq -c || true
+          jq -c 'select(.type == "error")' "$RUNNER_TEMP/events.jsonl" || true
+          cp "$RUNNER_TEMP/events.jsonl" "$INPUT/ci.txt" "$RUNNER_TEMP/review/"
+          if [ "$code" -eq 0 ] && [ -z "$(tr -d '[:space:]' < "$RUNNER_TEMP/review/review.md")" ]; then
             echo "::error::The reviewer finished without a review."
             code=1
+          fi
+          if [ "$criteria" != REVIEW.md ]; then
+            printf '\n> Критерии взяты из head этого PR: в базе ещё нет REVIEW.md.\n' >> "$RUNNER_TEMP/review/review.md"
           fi
           exit "$code"
 
