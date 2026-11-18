@@ -99,9 +99,18 @@ async function chooseTenOClock() {
   fireEvent.click(await screen.findByRole('button', { name: '10:00–10:30' }));
 }
 
-function fillForm({ name, email }: { name: string; email: string }) {
+function fillForm({ name, email, note }: { name: string; email: string; note?: string }) {
   fireEvent.change(screen.getByRole('textbox', { name: 'Имя' }), { target: { value: name } });
   fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), { target: { value: email } });
+  if (note !== undefined) {
+    fireEvent.change(screen.getByRole('textbox', { name: 'О чём звонок' }), {
+      target: { value: note },
+    });
+  }
+}
+
+function noteField() {
+  return screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'О чём звонок' });
 }
 
 function confirmButton() {
@@ -164,6 +173,23 @@ describe('the booking form', () => {
     });
   });
 
+  test('shows a server error under the note next to the field, not above the button', async () => {
+    respondToBooking(400, {
+      code: 'VALIDATION_FAILED',
+      message: 'Проверьте введённые данные',
+      fields: { note: 'Не длиннее 500 символов' },
+    });
+    await chooseTenOClock();
+    fillForm({ name: 'Анна Петрова', email: 'anna@example.com', note: 'я'.repeat(501) });
+
+    fireEvent.click(confirmButton());
+
+    await waitFor(() => {
+      expect(descriptionOf(noteField())).toContain('Не длиннее 500 символов');
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   test('takes the button out of action while the request is in flight', async () => {
     const { promise: released, resolve: release } = deferred();
     respondToBooking(201, booking, released);
@@ -201,6 +227,41 @@ describe('a confirmed Booking', () => {
     expect(within(confirmation).getByText('Знакомство')).toBeDefined();
     expect(within(confirmation).getByText('3 ноября, 10:00–10:30 МСК')).toBeDefined();
     expect(within(confirmation).getByText('30 мин')).toBeDefined();
+  });
+
+  test('sends the note and shows it in the confirmation with its line breaks', async () => {
+    const note = 'Первая строка\nВторая строка';
+    respondToBooking(201, { ...booking, note });
+    await chooseTenOClock();
+    fillForm({ name: 'Анна Петрова', email: 'anna@example.com', note });
+
+    fireEvent.click(confirmButton());
+
+    const confirmation = await screen.findByRole('region', { name: 'Запись подтверждена' });
+    expect(bookingRequests).toEqual([
+      {
+        eventTypeId: 'intro-call',
+        startsAt: '2026-11-03T10:00:00+03:00',
+        guest: { name: 'Анна Петрова', email: 'anna@example.com' },
+        note,
+      },
+    ]);
+    expect(within(confirmation).getByText(/Первая строка/).textContent).toBe(note);
+  });
+
+  test('does not show a note when the Booking has none', async () => {
+    respondToBooking(201, booking);
+    await chooseTenOClock();
+    fillForm({ name: 'Анна Петрова', email: 'anna@example.com' });
+
+    fireEvent.click(confirmButton());
+
+    const confirmation = await screen.findByRole('region', { name: 'Запись подтверждена' });
+    expect([...confirmation.querySelectorAll('p')].map(({ textContent }) => textContent)).toEqual([
+      'Знакомство',
+      '3 ноября, 10:00–10:30 МСК',
+      '30 мин',
+    ]);
   });
 
   test('«Записаться ещё» goes back to the calendar with Free Slots loaded again', async () => {

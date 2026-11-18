@@ -1,4 +1,4 @@
-import { Alert, Button, Group, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Button, Group, Stack, Text, Textarea, TextInput, Title } from '@mantine/core';
 import { isNotEmpty, useForm } from '@mantine/form';
 import { useMutation } from '@tanstack/react-query';
 import { useId, useState } from 'react';
@@ -9,7 +9,7 @@ import { formatDuration } from '../duration.ts';
 import { apiErrorOf, requiredMessage, unexpectedMessage } from '../errors.ts';
 import { formatSlot } from '../owner-time.ts';
 
-type Values = { guest: { name: string; email: string } };
+type Values = { guest: { name: string; email: string }; note: string };
 
 /**
  * The Guest's form for a chosen Slot. Only required fields are checked here; the server checks the rest, and its
@@ -36,7 +36,7 @@ export function BookingForm({
   const [formError, setFormError] = useState<string | null>(null);
 
   const form = useForm<Values>({
-    initialValues: { guest: { name: '', email: '' } },
+    initialValues: { guest: { name: '', email: '' }, note: '' },
     validate: { guest: { name: isNotEmpty(requiredMessage), email: isNotEmpty(requiredMessage) } },
   });
 
@@ -48,19 +48,27 @@ export function BookingForm({
       if ((code === 'SLOT_STARTED' || code === 'SLOT_UNAVAILABLE') && message !== undefined) {
         onSlotLost(message);
       } else {
-        // The keys are the form's own paths: `guest.name`, `guest.email`.
+        // The keys are the form's own paths: `guest.name`, `guest.email`, `note`.
         form.setErrors(fields ?? {});
         // An error that belongs to no field of the form, such as the start, goes above the button.
-        if (fields?.['guest.name'] === undefined && fields?.['guest.email'] === undefined) {
+        const fieldPaths = ['guest.name', 'guest.email', 'note'];
+        if (fieldPaths.every((path) => fields?.[path] === undefined)) {
           setFormError(fields?.startsAt ?? message ?? unexpectedMessage);
         }
       }
     },
   });
 
-  const submit = form.onSubmit(({ guest }) => {
+  const submit = form.onSubmit(({ guest, note }) => {
     setFormError(null);
-    book.mutate({ body: { eventTypeId: eventType.id, startsAt: slot.startsAt, guest } });
+    book.mutate({
+      body: {
+        eventTypeId: eventType.id,
+        startsAt: slot.startsAt,
+        guest,
+        ...(note === '' ? {} : { note }),
+      },
+    });
   });
 
   return (
@@ -82,6 +90,7 @@ export function BookingForm({
             withAsterisk
             {...form.getInputProps('guest.email')}
           />
+          <Textarea label="О чём звонок" minRows={3} {...form.getInputProps('note')} />
           {formError !== null && <Alert color="red">{formError}</Alert>}
           <Group>
             <Button type="submit" loading={book.isPending}>
