@@ -1,0 +1,79 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # The postinstall hook would run `mise run install` inside mise-action; CI runs it as an explicit step.
+  MISE_NO_HOOKS: 1
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: 2026.10.21
+
+      # The browser builds Playwright downloads depend only on its version.
+      - name: Read the Playwright version
+        id: playwright
+        run: >-
+          echo "version=$(node -p "require('./frontend/package-lock.json').packages['node_modules/playwright-core'].version")"
+          >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      # Also installs Chromium (`playwright install chromium`); on a cache hit there is nothing to download.
+      # The runner image already has every library Chromium needs, so there is no `--with-deps`: on these images it
+      # only added fonts for CJK and Thai scripts, which the scenarios never show, from an apt mirror that could
+      # stall the job for many minutes. Should an image lack a library, Chromium fails to start and names it.
+      - run: mise run install
+
+      - name: Check commit messages
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            npx commitlint --from "$PR_BASE" --to "$PR_HEAD" --verbose
+          elif [ "$PUSH_BEFORE" = 0000000000000000000000000000000000000000 ]; then
+            npx commitlint --last --verbose
+          else
+            npx commitlint --from "$PUSH_BEFORE" --to "$PUSH_AFTER" --verbose
+          fi
+
+      - run: mise run check
+        env:
+          # lychee uses it to avoid GitHub rate limits on links.
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
