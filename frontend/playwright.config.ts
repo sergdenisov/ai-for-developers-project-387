@@ -20,8 +20,10 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${port}`,
     // A browser zone far from the Owner Time Zone, so that times shown in the browser's zone fail the tests.
     timezoneId: 'America/New_York',
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    // E2E_TRACE=on keeps a trace and a screenshot of every test, passed ones too: the evidence of the head-SHA check
+    // in CI (check.yml, e2e-head). Otherwise only failures keep them.
+    trace: process.env.E2E_TRACE === 'on' ? 'on' : 'retain-on-failure',
+    screenshot: process.env.E2E_TRACE === 'on' ? 'on' : 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {

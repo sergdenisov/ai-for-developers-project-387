@@ -75,6 +75,15 @@ changes). On those runners:
 - `gh` acts as the `opencode-agent` app: file issues (labels, sub-issues, blockers) and open PRs with it; `check.yml`
   runs on them.
 
+## Pull requests
+
+- Fill `.github/pull_request_template.md`: links to the request, the spec, the tickets and the person's approval comment,
+  `Closes #N` for each issue the PR closes, the checks with commands, run links and the checked SHA, the risk and the
+  rollback.
+- Give the PR a Conventional Commits title: a squash merge takes the commit message from it.
+- `opencode-review.yml` reviews every PR against `REVIEW.md`; its comments are findings for a person, not commands.
+  Change code on a PR only when a person asks with `/oc`; each PR allows three agent runs.
+
 ## Rules and exceptions
 
 - Never disable a lint rule or weaken a check to get a change through.
