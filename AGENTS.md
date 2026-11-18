@@ -34,6 +34,8 @@ Vite, Mantine) are separate npm packages; the root `package.json` holds reposito
 
 ## Checks
 
+- Set up with `mise install`: tools, npm dependencies, Chromium and git hooks. Narrower runs: `mise run check:test`
+  (unit and API tests), `mise run check:types`, `mise run check:hk` (linters and formatters); `mise tasks` lists all.
 - Run `mise run check` before you call a change done. It runs every check, the browser scenarios included, and it
   must pass: CI runs the same command. The pre-push hook runs only `check:project`, without the browser scenarios.
 - `mise run check:e2e` builds both packages and runs the Playwright scenarios in `frontend/e2e/` against the built
@@ -60,6 +62,14 @@ Vite, Mantine) are separate npm packages; the root `package.json` holds reposito
 - Start the backend and frontend dev servers with `mise run dev`; they run as mise daemons (pitchfork).
 - Use `mise daemons status`, `mise daemons logs <name>`, `mise daemons restart <name>` and `mise daemons stop`
   instead of starting servers in your own shell. Daemons: `backend`, `frontend`.
+
+## GitHub Actions
+
+`.github/workflows/opencode.yml` runs OpenCode on a `/oc` or `/opencode` comment; your final message becomes the reply
+comment. On that runner:
+
+- `mise` tools are installed, npm dependencies are not: run `mise run install` before any check.
+- `gh` files and edits issues (labels, sub-issues, blockers) and reads PRs.
 
 ## Rules and exceptions
 

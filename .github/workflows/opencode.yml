@@ -1,0 +1,130 @@
+name: opencode
+
+# The OpenCode agent answers a `/oc` or `/opencode` command in a comment on an issue, a pull request or a line of
+# its diff. It acts as the OpenCode GitHub App (https://github.com/apps/opencode-agent): the app's token comes from
+# the OIDC exchange (`id-token: write`), and the agent replies with a comment and may push to the PR branch or
+# open a PR. README.md, "Агент в GitHub", describes the setup.
+# Exception, human decision pending in the PR that adds this workflow, review by 2027-05-18: the agent is called from a
+# comment, so the trigger is issue_comment. The gate job lets only a trusted participant's command through and never
+# a PR from a fork; the job with the model key runs code of this repository only.
+on:
+  # jactionlint ignore=dangerous-triggers
+  issue_comment:
+    # An edited comment does not call the agent again.
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions: {}
+
+# One agent at a time per issue or PR: a second command waits for the running one instead of racing its pushes, and
+# `queue: max` keeps every waiting run, so another comment never drops a queued command.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  # Runs without secrets. Lets the agent job start only for a command from a trusted participant (owner, member,
+  # collaborator; never a bot, so the agent never answers itself) on an issue or on a PR from this repository.
+  # A PR from a fork is refused: the agent may run its code, and that code must not see the model key.
+  gate:
+    if: >-
+      github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+      (startsWith(github.event.comment.body, '/oc') || contains(github.event.comment.body, ' /oc') ||
+      startsWith(github.event.comment.body, '/opencode') || contains(github.event.comment.body, ' /opencode'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      allowed: ${{ steps.source.outputs.allowed }}
+    steps:
+      - name: Refuse pull requests from forks
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          # Set on a comment in the PR conversation (issue_comment); empty on an issue.
+          ISSUE_PR_URL: ${{ github.event.issue.pull_request.url }}
+          # Set on a comment on a line of the diff (pull_request_review_comment).
+          REVIEW_PR_HEAD: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ -n "$REVIEW_PR_HEAD" ]; then
+            head="$REVIEW_PR_HEAD"
+          elif [ -n "$ISSUE_PR_URL" ]; then
+            head=$(gh api "$ISSUE_PR_URL" --jq '.head.repo.full_name')
+          else
+            head="$REPOSITORY"
+          fi
+          if [ "$head" = "$REPOSITORY" ]; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::The agent does not run on pull requests from forks ($head)."
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  opencode:
+    needs: gate
+    if: needs.gate.outputs.allowed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      # Checkout; the agent writes through the GitHub App token, not this one.
+      contents: read
+      # The OIDC token that OpenCode exchanges for the GitHub App token.
+      id-token: write
+      # `gh` for the agent (docs/agents/issue-tracker.md): skills such as to-spec and to-tickets file issues, label
+      # them and link sub-issues and blockers; PRs are read only.
+      issues: write
+      pull-requests: read
+    env:
+      # mise-action would run the postinstall hook (`mise run install`); the agent runs it when it needs checks.
+      MISE_NO_HOOKS: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The tools from mise.toml, so the commands in AGENTS.md (`mise run check` and others) work on the runner.
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: 2026.10.21
+
+      # Locally the skills come from the Claude Code plugin mattpocock-skills (README.md, "Агенты"), outside the
+      # repository. Install the same release, pinned to its commit, as global OpenCode skills; outside the
+      # workspace, so the agent never commits them.
+      - name: Install the mattpocock-skills skills
+        shell: bash
+        env:
+          SKILLS_REPO: mattpocock/skills
+          # mattpocock-skills 1.3.1, the version of the plugin.
+          SKILLS_SHA: 49dd158d1076134a641b33efb035946536778336
+        run: |
+          src="$RUNNER_TEMP/skills"
+          dest="$HOME/.config/opencode/skills"
+          mkdir -p "$src" "$dest"
+          curl -fsSL "https://codeload.github.com/$SKILLS_REPO/tar.gz/$SKILLS_SHA" | tar -xz -C "$src" --strip-components=1
+          # The plugin manifest lists the skills it ships.
+          jq -r '.skills[]' "$src/.claude-plugin/plugin.json" | while read -r skill; do
+            cp -R "$src/$skill" "$dest/"
+          done
+          for skill in to-spec to-tickets implement-spec; do
+            test -f "$dest/$skill/SKILL.md"
+          done
+          ls "$dest"
+
+      - uses: anomalyco/opencode/github@f4e363c8295fa90a03dddc451882fffe8fbce357 # v1.19.6
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        with:
+          # OpenCode Zen, which the OPENCODE_API_KEY key pays for. DeepSeek's newest model there, much cheaper than
+          # DeepSeek V4 Pro and Claude Sonnet.
+          model: opencode/deepseek-v4.1-flash
+          # The default commands, stated so the README and the `if` of the gate job stay in step with them.
+          mentions: /oc,/opencode
+          # Sessions are not published: the repository is public and a session holds the task's context.
+          # OpenCode 1.19 ignores the input, having discontinued session sharing; kept as the recorded decision.
+          share: false
