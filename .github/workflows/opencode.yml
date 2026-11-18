@@ -129,7 +129,27 @@ jobs:
           echo "::add-mask::$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
-      - uses: anomalyco/opencode/github@f4e363c8295fa90a03dddc451882fffe8fbce357 # v1.19.6
+      # The steps of the action anomalyco/opencode/github, run here with a pinned and verified OpenCode. The action asks
+      # the GitHub API for the latest release without a token, and on a shared runner that call fails often enough to
+      # break a run before the agent starts; it would also install whatever OpenCode was released last.
+      - name: Install OpenCode
+        shell: bash
+        env:
+          OPENCODE_VERSION: 1.19.6
+          # The digest GitHub lists for the opencode-linux-x64.tar.gz asset of that release.
+          OPENCODE_SHA256: 47734e08968b30cc22a0bffb6d9feeed76ad4aa743213a12122040392d09a057
+        run: |
+          archive="$RUNNER_TEMP/opencode.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/anomalyco/opencode/releases/download/v$OPENCODE_VERSION/opencode-linux-x64.tar.gz"
+          echo "$OPENCODE_SHA256  $archive" | sha256sum -c -
+          mkdir -p "$HOME/.opencode/bin"
+          tar -xzf "$archive" -C "$HOME/.opencode/bin" opencode
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+          "$HOME/.opencode/bin/opencode" --version
+
+      - name: Run OpenCode
+        run: opencode github run
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           # Nobody answers a permission prompt on the runner: an `ask` waits until the timeout. Give an answer to every
@@ -138,15 +158,14 @@ jobs:
           OPENCODE_PERMISSION: >-
             {"external_directory": "allow", "doom_loop": "deny", "read": {"*.env": "deny", "*.env.*": "deny"}}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        with:
           # OpenCode Zen, which the OPENCODE_API_KEY key pays for. DeepSeek's newest model there, much cheaper than
           # DeepSeek V4 Pro and Claude Sonnet.
-          model: opencode/deepseek-v4.1-flash
+          MODEL: opencode/deepseek-v4.1-flash
           # The default commands, stated so the README and the `if` of the gate job stay in step with them.
-          mentions: /oc,/opencode
+          MENTIONS: /oc,/opencode
           # Sessions are not published: the repository is public and a session holds the task's context.
-          # OpenCode 1.19 ignores the input, having discontinued session sharing; kept as the recorded decision.
-          share: false
+          # OpenCode 1.19 does not read it, having discontinued session sharing; kept as the recorded decision.
+          SHARE: false
 
       - name: Revoke the GitHub App token of gh
         if: always() && steps.app-token.outputs.token != ''
