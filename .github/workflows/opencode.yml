@@ -73,12 +73,8 @@ jobs:
     permissions:
       # Checkout; the agent writes through the GitHub App token, not this one.
       contents: read
-      # The OIDC token that OpenCode exchanges for the GitHub App token.
+      # The OIDC token that is exchanged for the GitHub App token.
       id-token: write
-      # `gh` for the agent (docs/agents/issue-tracker.md): skills such as to-spec and to-tickets file issues, label
-      # them and link sub-issues and blockers; PRs are read only.
-      issues: write
-      pull-requests: read
     env:
       # mise-action would run the postinstall hook (`mise run install`); the agent runs it when it needs checks.
       MISE_NO_HOOKS: 1
@@ -115,10 +111,28 @@ jobs:
           done
           ls "$dest"
 
+      # `gh` for the agent (docs/agents/issue-tracker.md) acts as the GitHub App, like its comments and pushes: skills
+      # such as to-spec, to-tickets and implement-spec file issues and open PRs as opencode-agent[bot]. A PR opened
+      # with GITHUB_TOKEN would not start check.yml; one opened by the app does. The exchange is the one the action
+      # makes itself (oidc_base_url), for a token of its own; the last step revokes it.
+      - name: Get a GitHub App token for gh
+        id: app-token
+        shell: bash
+        env:
+          OIDC_AUDIENCE: opencode-github-action
+          EXCHANGE_URL: https://api.opencode.ai/exchange_github_app_token
+        run: |
+          oidc=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$OIDC_AUDIENCE" | jq -er .value)
+          echo "::add-mask::$oidc"
+          token=$(curl -fsS -X POST -H "Authorization: Bearer $oidc" "$EXCHANGE_URL" | jq -er .token)
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
       - uses: anomalyco/opencode/github@f4e363c8295fa90a03dddc451882fffe8fbce357 # v1.19.6
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         with:
           # OpenCode Zen, which the OPENCODE_API_KEY key pays for. DeepSeek's newest model there, much cheaper than
           # DeepSeek V4 Pro and Claude Sonnet.
@@ -128,3 +142,9 @@ jobs:
           # Sessions are not published: the repository is public and a session holds the task's context.
           # OpenCode 1.19 ignores the input, having discontinued session sharing; kept as the recorded decision.
           share: false
+
+      - name: Revoke the GitHub App token of gh
+        if: always() && steps.app-token.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh api --method DELETE /installation/token
