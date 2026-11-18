@@ -13,6 +13,6 @@ allowed-elements = ["details", "summary"]
 # Exception, human decision in https://github.com/sergdenisov/ai-for-developers-project-386/pull/33: written by
 # release-please, which puts two blank lines before each section.
 "CHANGELOG.md" = ["MD012"]
-# Exception, human decision pending in the PR that adds the PR template: GitHub shows the PR title as the page's heading
-# above the body, so a level 1 heading in the template would repeat it.
+# Exception, human decision in https://github.com/sergdenisov/ai-for-developers-project-387/pull/23#issuecomment-6980864964:
+# GitHub shows the PR title as the page's heading above the body, so a level 1 heading in the template would repeat it.
 ".github/pull_request_template.md" = ["MD041"]

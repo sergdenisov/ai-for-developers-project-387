@@ -8,9 +8,9 @@ run-name: >-
 # its diff. It acts as the OpenCode GitHub App (https://github.com/apps/opencode-agent): the app's token comes from
 # the OIDC exchange (`id-token: write`), and the agent replies with a comment and may push to the PR branch or
 # open a PR. README.md, "Агент в GitHub", describes the setup.
-# Exception, human decision pending in the PR that adds this workflow, review by 2027-05-18: the agent is called from a
-# comment, so the trigger is issue_comment. The gate job lets only a trusted participant's command through and never
-# a PR from a fork; the job with the model key runs code of this repository only.
+# Exception, human decision in https://github.com/sergdenisov/ai-for-developers-project-387/pull/7, review by 2027-05-18:
+# the agent is called from a comment, so the trigger is issue_comment. The gate job lets only a trusted participant's
+# command through and never a PR from a fork; the job with the model key runs code of this repository only.
 on:
   # jactionlint ignore=dangerous-triggers
   issue_comment:
@@ -93,10 +93,12 @@ jobs:
           # Every admitted run of this PR counts: an agent job that was not skipped, whatever its result (a cancel, a
           # timeout and every Re-run attempt included), except this attempt itself. The history lives in Actions,
           # which the agent's token cannot rewrite; a comment is only a report.
-          used=0
-          for id in $(gh api --paginate \
+          # An assignment, not `for … in $(…)`: a failed API call must stop the gate (fail closed), not count zero.
+          ids=$(gh api --paginate \
             "repos/$GITHUB_REPOSITORY/actions/workflows/opencode.yml/runs?per_page=100&created=>=$created" \
-            --jq ".workflow_runs[] | select(.display_title == \"opencode PR #$pr\") | .id"); do
+            --jq ".workflow_runs[] | select(.display_title == \"opencode PR #$pr\") | .id")
+          used=0
+          for id in $ids; do
             n=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?filter=all&per_page=100" \
               --jq "[.jobs[] | select(.name == \"opencode\" and .conclusion != \"skipped\"
                 and (.run_id != $RUN_ID or .run_attempt != $RUN_ATTEMPT))] | length" | awk '{ s += $1 } END { print s + 0 }')
@@ -250,9 +252,11 @@ jobs:
   # issue or PR, with the SHA and the logs, so a person picks the next step. A successful agent replies itself.
   report:
     needs: [gate, opencode]
+    # A failed gate is reported too; an agent that finished (exit code 0) has replied, even if a later step failed.
     if: >-
-      always() && (needs.gate.outputs.reason == 'limit_exhausted' ||
-      needs.opencode.result == 'failure' || needs.opencode.result == 'cancelled')
+      always() && (needs.gate.result == 'failure' || needs.gate.outputs.reason == 'limit_exhausted' ||
+      ((needs.opencode.result == 'failure' || needs.opencode.result == 'cancelled') &&
+      needs.opencode.outputs.exit-code != '0'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -264,14 +268,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          GATE_RESULT: ${{ needs.gate.result }}
           GATE_REASON: ${{ needs.gate.outputs.reason }}
           USED: ${{ needs.gate.outputs.used }}
-          SHA: ${{ needs.gate.outputs.sha }}
+          SHA: ${{ needs.gate.outputs.sha || github.sha }}
           STARTED: ${{ needs.opencode.outputs.started }}
           EXIT_CODE: ${{ needs.opencode.outputs.exit-code }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if [ "$GATE_REASON" = limit_exhausted ]; then
+          if [ "$GATE_RESULT" = failure ]; then
+            reason=infra
+            detail="Упала проверка перед запуском агента (gate): бюджет не проверен, модель не вызывалась."
+          elif [ "$GATE_REASON" = limit_exhausted ]; then
             reason=limit_exhausted
             detail="Бюджет запусков агента на этот PR исчерпан ($USED из 3), модель не вызывалась."
           elif [ "$STARTED" != true ]; then
