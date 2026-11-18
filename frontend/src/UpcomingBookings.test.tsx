@@ -13,6 +13,7 @@ const upcomingBookings: ListUpcomingResponse = [
     startsAt: '2026-11-02T10:00:00+03:00',
     endsAt: '2026-11-02T10:30:00+03:00',
     guest: { name: 'Анна Петрова', email: 'anna@example.com' },
+    note: 'Хочу обсудить договор',
     createdAt: '2026-10-30T18:45:12+03:00',
   },
   {
@@ -55,16 +56,47 @@ test('shows each Upcoming Booking as a row in the Owner Time Zone, in the order 
   renderApp('/admin');
 
   expect(cellsOf(await findTable())).toEqual([
-    ['Дата и время, МСК', 'Тип события', 'Гость', 'Email', 'Создана, МСК'],
-    ['2 нояб., 10:00–10:30', 'Знакомство', 'Анна Петрова', 'anna@example.com', '30 окт., 18:45'],
+    ['Дата и время, МСК', 'Тип события', 'Гость', 'О чём звонок', 'Email', 'Создана, МСК'],
+    [
+      '2 нояб., 10:00–10:30',
+      'Знакомство',
+      'Анна Петрова',
+      'Хочу обсудить договор',
+      'anna@example.com',
+      '30 окт., 18:45',
+    ],
     [
       '3 нояб., 14:00–15:30',
       'Консультация',
       'Иван Сидоров',
+      '—',
       'Ivan.Sidorov@Example.com',
       '1 нояб., 09:05',
     ],
   ]);
+});
+
+test('keeps the line breaks of a note and wraps it inside its column', async () => {
+  const note = 'Первая строка\nВторая строка';
+  respondWith([{ ...upcomingBookings[0], note }]);
+  renderApp('/admin');
+
+  const table = await findTable();
+  const cell = within(table).getByRole('cell', { name: /Первая строка/ });
+  expect(cell.textContent).toBe(note);
+  expect(getComputedStyle(cell).whiteSpace).toBe('pre-wrap');
+});
+
+test('renders an HTML-like note as plain text', async () => {
+  const note = '<b>важное</b> и <script>alert("x")</script>';
+  respondWith([{ ...upcomingBookings[0], note }]);
+  renderApp('/admin');
+
+  const table = await findTable();
+  const cell = within(table).getByRole('cell', { name: note });
+  expect(cell.textContent).toBe(note);
+  expect(cell.querySelector('b')).toBeNull();
+  expect(cell.querySelector('script')).toBeNull();
 });
 
 test('says there are no Upcoming Bookings instead of an empty table', async () => {
