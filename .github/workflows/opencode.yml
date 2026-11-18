@@ -289,9 +289,10 @@ jobs:
           elif [ "$STARTED" != true ]; then
             reason=infra
             detail="Сбой подготовки до запуска агента: установка инструментов, токен или ключ модели."
-          elif [ "$EXIT_CODE" = 124 ]; then
+          # 124 is the agent's own 55-minute limit; no exit code after the start is the job's 60-minute limit.
+          elif [ "$EXIT_CODE" = 124 ] || [ -z "$EXIT_CODE" ]; then
             reason=timeout
-            detail="Агент не уложился в 55 минут и был остановлен."
+            detail="Агент не уложился в отведённое время и был остановлен."
           else
             reason=agent_failed
             detail="Агент завершился ошибкой или прогон остановлен (код \`${EXIT_CODE:-нет}\`); уточните по логу."
