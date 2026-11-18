@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/sergdenisov/ai-for-developers-project-387/compare/v0.2.0...v0.3.0) (2026-11-18)
+
+
+### Features
+
+* **admin:** show the Booking Note in Upcoming Bookings ([#16](https://github.com/sergdenisov/ai-for-developers-project-387/issues/16)) ([4393445](https://github.com/sergdenisov/ai-for-developers-project-387/commit/43934450c17415a2bb92f06484e94a9adc15c094))
+* **booking:** add the Guest's Booking Note ([#15](https://github.com/sergdenisov/ai-for-developers-project-387/issues/15)) ([8036c61](https://github.com/sergdenisov/ai-for-developers-project-387/commit/8036c616673ee68abdbe48c8bbcac2edee9f67f0))
+* let a Guest leave a note about the call ([#14](https://github.com/sergdenisov/ai-for-developers-project-387/issues/14)) ([5323fc2](https://github.com/sergdenisov/ai-for-developers-project-387/commit/5323fc202e09ab4f66d329c8e8146dd60ee4a1d7))
+
+
+### Bug Fixes
+
+* **booking:** label the Booking Note in the confirmation ([#15](https://github.com/sergdenisov/ai-for-developers-project-387/issues/15)) ([62086d5](https://github.com/sergdenisov/ai-for-developers-project-387/commit/62086d590b232fbe2f80e4225db1434d5064e0ee))
+
 ## [0.2.0](https://github.com/sergdenisov/ai-for-developers-project-386/compare/v0.1.0...v0.2.0) (2026-11-04)
 
 
