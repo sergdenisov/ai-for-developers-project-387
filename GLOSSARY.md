@@ -25,6 +25,11 @@ _Avoid_: Event, meeting type, service
 A Guest's reservation of a Slot of an Event Type (UI: «Запись»).
 _Avoid_: Event, appointment, reservation, meeting
 
+**Booking Note**:
+An optional text a Guest leaves when booking, saying what they want to discuss; it belongs to the Booking, not to
+the Guest's contact data, and is absent when there is none (UI: «О чём звонок»).
+_Avoid_: Comment, message, description (that is the Event Type's own field)
+
 **Upcoming Booking**:
 A Booking whose Slot has not ended yet, including a call in progress; the Owner sees these in the admin area.
 

@@ -29,11 +29,12 @@ async function bookAt(
   eventTypeId: string,
   startsAt: string,
   guest = { name: 'Анна', email: 'anna@example.com' },
+  note?: string,
 ) {
   const response = await fetch(app.url('/api/bookings'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ eventTypeId, startsAt, guest }),
+    body: JSON.stringify({ eventTypeId, startsAt, guest, ...(note === undefined ? {} : { note }) }),
   });
   expect(response.status).toBe(201);
 }
@@ -85,6 +86,36 @@ describe('Upcoming Bookings', () => {
         createdAt: '2026-11-02T10:05:00+03:00',
       },
     ]);
+  });
+
+  test('come with the note the Guest left', async () => {
+    await createEventType('consultation', 'Консультация', 60);
+    await bookAt(
+      'consultation',
+      '2026-11-03T10:00:00+03:00',
+      { name: 'Анна', email: 'anna@example.com' },
+      'Хочу обсудить проект',
+    );
+
+    expect(await listUpcoming()).toEqual([
+      {
+        id: expect.any(String),
+        eventType: { id: 'consultation', name: 'Консультация' },
+        startsAt: '2026-11-03T10:00:00+03:00',
+        endsAt: '2026-11-03T11:00:00+03:00',
+        guest: { name: 'Анна', email: 'anna@example.com' },
+        note: 'Хочу обсудить проект',
+        createdAt: '2026-11-02T10:00:00+03:00',
+      },
+    ]);
+  });
+
+  test('leave out a note that is blank', async () => {
+    await createEventType('consultation', 'Консультация', 60);
+    await bookAt('consultation', '2026-11-03T10:00:00+03:00', undefined, '   \n ');
+
+    const [booking] = (await listUpcoming()) as Record<string, unknown>[];
+    expect(booking).not.toHaveProperty('note');
   });
 
   test('go nearest first, whatever order they were booked in', async () => {

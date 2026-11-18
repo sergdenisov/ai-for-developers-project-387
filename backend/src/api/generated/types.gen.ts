@@ -38,6 +38,11 @@ export type Booking = {
   startsAt: Moment;
   endsAt: Moment;
   guest: Guest;
+  /**
+   * What the Guest wants to discuss; absent when there is none. Surrounding spaces are trimmed before the length is
+   * checked; line breaks and internal spaces are kept. A blank note means there is none.
+   */
+  note?: string;
   createdAt: Moment;
 };
 
@@ -59,6 +64,12 @@ export type CreateBookingRequest = {
    */
   startsAt: Moment;
   guest: Guest;
+  /**
+   * What the Guest wants to discuss; optional. Surrounding spaces are trimmed before the length is checked; line
+   * breaks and internal spaces are kept. A blank note means there is none, and the field is then absent in the
+   * response.
+   */
+  note?: string;
 };
 
 /**

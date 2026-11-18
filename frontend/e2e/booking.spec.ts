@@ -72,9 +72,35 @@ test('a Guest books the first Free Slot and the Owner sees the Booking among Upc
     new RegExp(`, ${time}$`),
     eventType.name,
     guest.name,
+    '—',
     guest.email,
     /, \d{2}:\d{2}$/,
   ]);
+});
+
+test('a Guest leaves a note and the Owner sees it next to the booking', async ({ page }) => {
+  const run = unique();
+  const eventType = { name: `Звонок с заметкой ${run}`, id: `note-${run}` };
+  const guest = { name: `Гость ${run}`, email: `note-${run}@example.com` };
+  const note = `Обсудить проект ${run}`;
+
+  await createEventType(page, eventType);
+
+  await page.goto(`/book/${eventType.id}`);
+  await chooseFirstFreeSlot(page);
+  await fillGuest(page, guest);
+  await page.getByRole('textbox', { name: 'О чём звонок' }).fill(note);
+  await page.getByRole('button', { name: 'Подтвердить запись' }).click();
+
+  const confirmation = page.getByRole('region', { name: 'Запись подтверждена' });
+  await expect(confirmation).toContainText(note);
+
+  await page.getByRole('banner').getByRole('link', { name: 'Админка' }).click();
+  const booking = page
+    .getByRole('table', { name: 'Предстоящие записи' })
+    .getByRole('row')
+    .filter({ has: page.getByRole('cell', { name: guest.email }) });
+  await expect(booking.getByRole('cell', { name: note, exact: true })).toBeVisible();
 });
 
 test('when two tabs choose the same Slot, the second learns it is taken and sees Free Slots without it', async ({

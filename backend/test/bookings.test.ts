@@ -79,6 +79,61 @@ describe('booking a Free Slot', () => {
       guest: { name: 'я'.repeat(100), email: 'anna@example.com' },
     });
   });
+
+  test('returns the note and trims its surrounding spaces', async () => {
+    await createEventType('consultation', 'Консультация', 60);
+
+    const response = await book({
+      eventTypeId: 'consultation',
+      startsAt: '2026-11-03T10:00:00+03:00',
+      guest,
+      note: '  Хочу обсудить проект  ',
+    });
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ note: 'Хочу обсудить проект' });
+  });
+
+  test('keeps the line breaks and internal spaces of the note', async () => {
+    await createEventType('consultation', 'Консультация', 60);
+
+    const response = await book({
+      eventTypeId: 'consultation',
+      startsAt: '2026-11-03T10:00:00+03:00',
+      guest,
+      note: 'Первая строка\n  Вторая строка',
+    });
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ note: 'Первая строка\n  Вторая строка' });
+  });
+
+  test('accepts a note of only spaces but leaves it out of the Booking', async () => {
+    await createEventType('consultation', 'Консультация', 60);
+
+    const response = await book({
+      eventTypeId: 'consultation',
+      startsAt: '2026-11-03T10:00:00+03:00',
+      guest,
+      note: '   \n  ',
+    });
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).not.toHaveProperty('note');
+  });
+
+  test('omits the note when the Guest leaves none', async () => {
+    await createEventType('consultation', 'Консультация', 60);
+
+    const response = await book({
+      eventTypeId: 'consultation',
+      startsAt: '2026-11-03T10:00:00+03:00',
+      guest,
+    });
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).not.toHaveProperty('note');
+  });
 });
 
 /** Books with `changes` on top of a valid request and expects `400 VALIDATION_FAILED` with `fields`. */
@@ -131,6 +186,33 @@ describe('a request that can never be booked', () => {
 
     expect(await fieldErrors({ guest: { ...guest, email } })).toEqual({
       'guest.email': 'Не длиннее 254 символов',
+    });
+  });
+
+  test('answers 400 for a note longer than 500 characters after trimming', async () => {
+    expect(await fieldErrors({ note: ` ${'я'.repeat(501)} ` })).toEqual({
+      note: 'Не длиннее 500 символов',
+    });
+  });
+
+  test('accepts a note of exactly 500 characters after trimming', async () => {
+    await createEventType('consultation', 'Консультация', 60);
+    const note = 'я'.repeat(500);
+
+    const response = await book({
+      eventTypeId: 'consultation',
+      startsAt: '2026-11-03T10:00:00+03:00',
+      guest,
+      note: ` ${note} `,
+    });
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ note });
+  });
+
+  test('answers 400 for a note that cannot be a string', async () => {
+    expect(await fieldErrors({ note: { text: 'не строка' } })).toEqual({
+      note: 'Неверный тип значения',
     });
   });
 
@@ -314,5 +396,27 @@ describe('two Bookings never overlap', () => {
       responses.filter(({ status }) => status === 409).map((response) => response.json()),
     );
     expect(conflicts).toEqual(Array.from({ length: 9 }, () => slotUnavailable));
+  });
+});
+
+describe('a note for a Slot that is taken', () => {
+  test('answers 409 SLOT_UNAVAILABLE and does not keep the note anywhere', async () => {
+    await createEventType('consultation', 'Консультация', 60);
+    await bookAt('consultation', '2026-11-03T10:00:00+03:00');
+
+    const response = await book({
+      eventTypeId: 'consultation',
+      startsAt: '2026-11-03T10:00:00+03:00',
+      guest,
+      note: 'Эта заметка не должна сохраниться',
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual(slotUnavailable);
+
+    const upcoming = await fetch(app.url('/api/bookings'));
+    const bookings = (await upcoming.json()) as Record<string, unknown>[];
+    expect(bookings).toHaveLength(1);
+    expect(bookings[0]).not.toHaveProperty('note');
   });
 });

@@ -218,6 +218,12 @@ components:
           $ref: '#/components/schemas/Moment'
         guest:
           $ref: '#/components/schemas/Guest'
+        note:
+          type: string
+          maxLength: 500
+          description: |-
+            What the Guest wants to discuss; absent when there is none. Surrounding spaces are trimmed before the length is
+            checked; line breaks and internal spaces are kept. A blank note means there is none.
         createdAt:
           $ref: '#/components/schemas/Moment'
       description: A Guest's reservation of a Slot of an Event Type.
@@ -247,6 +253,13 @@ components:
           description: Start of a Free Slot of the Event Type.
         guest:
           $ref: '#/components/schemas/Guest'
+        note:
+          type: string
+          maxLength: 500
+          description: |-
+            What the Guest wants to discuss; optional. Surrounding spaces are trimmed before the length is checked; line
+            breaks and internal spaces are kept. A blank note means there is none, and the field is then absent in the
+            response.
       description: Data of a new Booking; the server works out its end from the Event Type duration. Unknown fields are dropped.
     CreateEventTypeRequest:
       type: object
