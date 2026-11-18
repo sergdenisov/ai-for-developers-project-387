@@ -87,11 +87,13 @@ run = "betterleaks git --redact --no-banner"
 # Exception, human decision in https://github.com/sergdenisov/ai-for-developers-project-386/pull/43: it also skips
 # this repository's compare links, which release-please writes into CHANGELOG.md for a tag that exists only after
 # its release PR is merged.
+# GitHub answers a burst of commit-page requests (CHANGELOG.md links them) with 503: at most two at a time per host, and
+# a failed request is retried after a pause.
 [tasks."check:network"]
 description = "Checks that need the network: known vulnerabilities in lockfiles, broken links"
 run = [
   "osv-scanner scan source -r --config osv-scanner.toml .",
-  'lychee --no-progress --exclude-path frontend/index.html --exclude "^https://github\.com/sergdenisov/ai-for-developers-project-387/compare/v" .',
+  'lychee --no-progress --host-concurrency 2 --max-retries 5 --retry-wait-time 5 --exclude-path frontend/index.html --exclude "^https://github\.com/sergdenisov/ai-for-developers-project-387/compare/v" .',
 ]
 
 [tasks."check:contract"]

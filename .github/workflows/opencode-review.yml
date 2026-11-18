@@ -72,7 +72,8 @@ jobs:
           mkdir -p "$INPUT/head" "$INPUT/issues" "$RUNNER_TEMP/review"
           git fetch --no-tags --depth=1 origin "$HEAD_SHA"
           git rev-parse FETCH_HEAD | tee "$RUNNER_TEMP/review/sha.txt"
-          gh pr view "$PR_NUMBER" --comments > "$INPUT/pr.md"
+          # `gh … view --comments` prints the comments only: the body comes from a plain `view` first.
+          { gh pr view "$PR_NUMBER"; echo; echo "## Comments"; gh pr view "$PR_NUMBER" --comments; } > "$INPUT/pr.md"
           gh pr diff "$PR_NUMBER" > "$INPUT/diff.patch"
           gh pr view "$PR_NUMBER" --json files --jq '.files[].path' | while read -r path; do
             if git cat-file -e "$HEAD_SHA:$path" 2>/dev/null; then
@@ -84,8 +85,11 @@ jobs:
           refs=$(grep -oE "(#|/issues/)[0-9]+" <<< "$body" | grep -oE "[0-9]+" | sort -un | head -n 20 || true)
           for n in $refs; do
             [ "$n" = "$PR_NUMBER" ] && continue
-            gh issue view "$n" --comments > "$INPUT/issues/$n.md" 2>/dev/null || rm -f "$INPUT/issues/$n.md"
+            { gh issue view "$n" && echo && echo "## Comments" && gh issue view "$n" --comments; } \
+              > "$INPUT/issues/$n.md" 2>/dev/null || rm -f "$INPUT/issues/$n.md"
           done
+          # The reviewer must get the PR's description: an empty one once read as "the PR has no description".
+          grep -qF "$(gh pr view "$PR_NUMBER" --json title --jq .title)" "$INPUT/pr.md"
           # The criteria come from the base. Only while the base has none yet (the PR that adds REVIEW.md) the head's
           # version is used, and the review says so.
           if [ -f REVIEW.md ]; then
