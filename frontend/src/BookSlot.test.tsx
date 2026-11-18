@@ -249,6 +249,21 @@ describe('a confirmed Booking', () => {
     expect(within(confirmation).getByText(/Первая строка/).textContent).toBe(note);
   });
 
+  test('labels the note in the confirmation as «О чём звонок»', async () => {
+    const note = 'Первая строка\nВторая строка';
+    respondToBooking(201, { ...booking, note });
+    await chooseTenOClock();
+    fillForm({ name: 'Анна Петрова', email: 'anna@example.com', note });
+
+    fireEvent.click(confirmButton());
+
+    const confirmation = await screen.findByRole('region', { name: 'Запись подтверждена' });
+    const label = within(confirmation).getByText('О чём звонок');
+    const noteParagraph = within(confirmation).getByText(/Первая строка/);
+    expect(label.nextElementSibling).toBe(noteParagraph);
+    expect(noteParagraph.textContent).toBe(note);
+  });
+
   test('does not show a note when the Booking has none', async () => {
     respondToBooking(201, booking);
     await chooseTenOClock();
