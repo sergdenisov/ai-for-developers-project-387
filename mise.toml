@@ -87,10 +87,12 @@ run = "betterleaks git --redact --no-banner"
 # Exception, human decision in https://github.com/sergdenisov/ai-for-developers-project-386/pull/43: it also skips
 # this repository's compare links, which release-please writes into CHANGELOG.md for a tag that exists only after
 # its release PR is merged.
-# Exception, human decision in the PR that adds it, review by 2027-05-18: it also skips the commit links of the
-# original repository ai-for-developers-project-386, which release-please wrote into CHANGELOG.md up to 0.2.0.
-# github.com answers them from Actions runners with 503 (lychee does not retry it), while they are immutable and open
-# fine elsewhere; that repository's issue and PR links are still checked.
+# Exception, human decision in
+# https://github.com/sergdenisov/ai-for-developers-project-387/pull/28#issuecomment-6983095731,
+# review by 2027-05-18: it also skips the commit links of the original repository ai-for-developers-project-386,
+# which release-please wrote into CHANGELOG.md up to 0.2.0. github.com answers them from Actions runners with 503
+# (lychee does not retry it), while they are immutable and open fine elsewhere; that repository's issue and PR links
+# are still checked.
 [tasks."check:network"]
 description = "Checks that need the network: known vulnerabilities in lockfiles, broken links"
 run = [
