@@ -69,7 +69,7 @@ Vite, Mantine) are separate npm packages; the root `package.json` holds reposito
 comment. On that runner:
 
 - `mise` tools are installed, npm dependencies are not: run `mise run install` before any check.
-- `gh` reads issues and PRs only: put a spec or tickets a skill would publish into your reply; a person files them.
+- `gh` files and edits issues (labels, sub-issues, blockers) and reads PRs.
 
 ## Rules and exceptions
 

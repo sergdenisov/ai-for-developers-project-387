@@ -75,8 +75,9 @@ jobs:
       contents: read
       # The OIDC token that OpenCode exchanges for the GitHub App token.
       id-token: write
-      # `gh issue view` / `gh pr view` for the agent (docs/agents/issue-tracker.md); read only.
-      issues: read
+      # `gh` for the agent (docs/agents/issue-tracker.md): skills such as to-spec and to-tickets file issues, label
+      # them and link sub-issues and blockers; PRs are read only.
+      issues: write
       pull-requests: read
     env:
       # mise-action would run the postinstall hook (`mise run install`); the agent runs it when it needs checks.
@@ -119,8 +120,9 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         with:
-          # OpenCode Zen, which the OPENCODE_API_KEY key pays for.
-          model: opencode/claude-sonnet-5-5
+          # OpenCode Zen, which the OPENCODE_API_KEY key pays for. DeepSeek's strongest model there, cheaper than
+          # Claude Sonnet.
+          model: opencode/deepseek-v4-pro
           # The default commands, stated so the README and the `if` of the gate job stay in step with them.
           mentions: /oc,/opencode
           # Sessions are not published: the repository is public and a session holds the task's context.
