@@ -51,8 +51,9 @@ Vite, Mantine) are separate npm packages; the root `package.json` holds reposito
 
 - One process serves the API and the built frontend: `Dockerfile` starts the backend with `--frontend-dir`, on the port
   from `PORT`. `backend/src/frontend.ts` answers every other `GET` page with `index.html`.
-- The app runs on Render as a Docker web service that deploys from `main`. Data lives in memory, so run one instance
-  only: a second one would not see the Bookings of the first, and the ban on overlaps would not hold.
+- The app runs on Render as a Docker web service that deploys from `main` of the original repository (see **Origin**
+  below). Data lives in memory, so run one instance only: a second one would not see the Bookings of the first, and
+  the ban on overlaps would not hold.
 - Never commit keys or tokens. Render MCP signs in with OAuth; see "Деплой" in `README.md`.
 
 ## Dev servers
@@ -88,8 +89,20 @@ GitHub turns it into a link, so the history shows which commit did which ticket.
 
 ### Issue tracker
 
-Issues live in GitHub Issues of `sergdenisov/ai-for-developers-project-386`; use the `gh` CLI. See
+Issues live in GitHub Issues of `sergdenisov/ai-for-developers-project-387`; use the `gh` CLI. See
 `docs/agents/issue-tracker.md`.
+
+### Origin
+
+The app was built in [`sergdenisov/ai-for-developers-project-386`](https://github.com/sergdenisov/ai-for-developers-project-386)
+and moved here without its git history. Its tracker keeps the original decisions; a bare `#N` in `CHANGELOG.md` up to
+0.2.0 and in the exception comments of lint configs refers to that repository:
+
+- the spec: [#24](https://github.com/sergdenisov/ai-for-developers-project-386/issues/24), its tickets #25–#32;
+- the decision map: [#9](https://github.com/sergdenisov/ai-for-developers-project-386/issues/9), its sub-issues
+  #10–#20 hold the grilling and research behind the spec and the ADRs in `docs/adr/`.
+
+New issues, specs and tickets go to this repository's tracker.
 
 ### Triage labels
 

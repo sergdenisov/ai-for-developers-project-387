@@ -91,7 +91,7 @@ run = "betterleaks git --redact --no-banner"
 description = "Checks that need the network: known vulnerabilities in lockfiles, broken links"
 run = [
   "osv-scanner scan source -r .",
-  'lychee --no-progress --exclude-path frontend/index.html --exclude "^https://github\.com/sergdenisov/ai-for-developers-project-386/compare/v" .',
+  'lychee --no-progress --exclude-path frontend/index.html --exclude "^https://github\.com/sergdenisov/ai-for-developers-project-387/compare/v" .',
 ]
 
 [tasks."check:contract"]

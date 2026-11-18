@@ -1,8 +1,8 @@
-# Календарь звонков
+# Календарь звонков (продолжение)
 
-[![hexlet-check](https://github.com/sergdenisov/ai-for-developers-project-386/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/sergdenisov/ai-for-developers-project-386/actions)
+[![hexlet-check](https://github.com/sergdenisov/ai-for-developers-project-387/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/sergdenisov/ai-for-developers-project-387/actions)
 
-Разработайте совместно с ИИ сервис для бронирования календаря
+Интегрируйте работу агентов в GitHub проект
 
 Учебный проект Хекслета: <https://ru.hexlet.io/programs/ai-for-developers>
 Как это должно работать: <https://files.hexlet.app/a/2ipc5m>
@@ -10,6 +10,31 @@
 **Приложение:** <https://call-booking-50q8.onrender.com> (бесплатный тариф: первый запрос после простоя будит сервис
 около минуты). Данные живут в памяти и пропадают при перезапуске, поэтому сначала создайте тип события в
 [«Админке»](https://call-booking-50q8.onrender.com/admin), а потом записывайтесь на него.
+
+Если адрес недоступен, запустите приложение локально одним из способов:
+
+```bash
+# Docker: один контейнер отдаёт API и фронтенд
+docker build --tag calendar .
+docker run --rm --env PORT=8080 --publish 8080:8080 calendar   # http://localhost:8080
+
+# mise: собрать и запустить, как в Docker-образе
+mise install
+mise run start                                                 # http://localhost:3000
+```
+
+## Исходный проект
+
+Приложение сделано в проекте «Календарь звонков»
+[`ai-for-developers-project-386`](https://github.com/sergdenisov/ai-for-developers-project-386) и перенесено сюда без
+истории git. Решения остаются в трекере исходного репозитория:
+
+- спецификация: [#24](https://github.com/sergdenisov/ai-for-developers-project-386/issues/24) и её тикеты #25–#32;
+- карта решений: [#9](https://github.com/sergdenisov/ai-for-developers-project-386/issues/9) и её подзадачи #10–#20,
+  из которых выросли спецификация и ADR в `docs/adr/`;
+- словарь предметной области — `GLOSSARY.md`.
+
+Новые задачи заводятся в [трекере этого репозитория](https://github.com/sergdenisov/ai-for-developers-project-387/issues).
 
 ## Стек
 
@@ -30,8 +55,8 @@
 Нужен [mise](https://mise.jdx.dev/getting-started.html).
 
 ```bash
-git clone https://github.com/sergdenisov/ai-for-developers-project-386.git
-cd ai-for-developers-project-386
+git clone https://github.com/sergdenisov/ai-for-developers-project-387.git
+cd ai-for-developers-project-387
 mise install   # инструменты, а через хук postinstall — npm-зависимости и git-хуки
 ```
 
@@ -120,7 +145,8 @@ docker run --rm --env PORT=8080 --publish 8080:8080 calendar   # http://localhos
 
 Приложение опубликовано на [Render](https://render.com/) как Docker-сервис `call-booking` на бесплатном тарифе в
 регионе Frankfurt: <https://call-booking-50q8.onrender.com>. Render собирает образ из `Dockerfile`, сам задаёт `PORT`
-и выкатывает каждый коммит в `main`.
+и выкатывает каждый коммит в `main` исходного репозитория
+[`ai-for-developers-project-386`](https://github.com/sergdenisov/ai-for-developers-project-386).
 
 ### Хранение данных
 
