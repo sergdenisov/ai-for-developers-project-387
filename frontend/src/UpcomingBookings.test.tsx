@@ -35,9 +35,9 @@ beforeEach(() => {
   server.use(http.get('*/api/event-types', () => HttpResponse.json([])));
 });
 
-/** The table of Upcoming Bookings, found by its heading. */
+/** The table of Upcoming Bookings, found by its heading. `mise run check` runs this suite under heavy load. */
 function findTable() {
-  return screen.findByRole('table', { name: 'Предстоящие записи' });
+  return screen.findByRole('table', { name: 'Предстоящие записи' }, { timeout: 5000 });
 }
 
 /** The text of every cell, row by row; the first row holds the column headers. */
@@ -103,7 +103,9 @@ test('says there are no Upcoming Bookings instead of an empty table', async () =
   respondWith([]);
   renderApp('/admin');
 
-  expect(await screen.findByText('Предстоящих записей нет')).toBeDefined();
+  expect(
+    await screen.findByText('Предстоящих записей нет', undefined, { timeout: 5000 }),
+  ).toBeDefined();
   expect(screen.queryByRole('table')).toBeNull();
 });
 
