@@ -145,7 +145,7 @@ docker run --rm --env PORT=8080 --publish 8080:8080 calendar   # http://localhos
 
 Приложение опубликовано на [Render](https://render.com/) как Docker-сервис `call-booking` на бесплатном тарифе в
 регионе Frankfurt: <https://call-booking-50q8.onrender.com>. Render собирает образ из `Dockerfile`, сам задаёт `PORT`
-и выкатывает каждый коммит в `main` исходного репозитория
+и выкатывает `main` этого репозитория. До переноса сервис деплоился из исходного репозитория
 [`ai-for-developers-project-386`](https://github.com/sergdenisov/ai-for-developers-project-386).
 
 ### Хранение данных
