@@ -132,6 +132,11 @@ jobs:
       - uses: anomalyco/opencode/github@f4e363c8295fa90a03dddc451882fffe8fbce357 # v1.19.6
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          # Nobody answers a permission prompt on the runner: an `ask` waits until the timeout. Give an answer to every
+          # rule OpenCode 1.19 asks by default. Paths outside the checkout (/tmp and the like) are allowed, as the shell
+          # already reaches them; a doom loop and .env files are denied.
+          OPENCODE_PERMISSION: >-
+            {"external_directory": "allow", "doom_loop": "deny", "read": {"*.env": "deny", "*.env.*": "deny"}}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         with:
           # OpenCode Zen, which the OPENCODE_API_KEY key pays for. DeepSeek's newest model there, much cheaper than
