@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/sergdenisov/ai-for-developers-project-387/compare/v0.3.0...v0.4.0) (2026-11-19)
+
+
+### Features
+
+* **frontend:** describe the app for search engines ([#41](https://github.com/sergdenisov/ai-for-developers-project-387/issues/41)) ([91e048f](https://github.com/sergdenisov/ai-for-developers-project-387/commit/91e048ff382ccb6271f190ad8f7735b2ca88d4f0))
+* **frontend:** describe the app for search engines ([#42](https://github.com/sergdenisov/ai-for-developers-project-387/issues/42)) ([10f71d0](https://github.com/sergdenisov/ai-for-developers-project-387/commit/10f71d02c936ecb704fe09b60ca24c1f58d10072))
+
 ## [0.3.0](https://github.com/sergdenisov/ai-for-developers-project-387/compare/v0.2.0...v0.3.0) (2026-11-18)
 
 
