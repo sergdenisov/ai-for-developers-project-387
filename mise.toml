@@ -88,16 +88,16 @@ run = "betterleaks git --redact --no-banner"
 # this repository's compare links, which release-please writes into CHANGELOG.md for a tag that exists only after
 # its release PR is merged.
 # Exception, human decision in
-# https://github.com/sergdenisov/ai-for-developers-project-387/pull/28#issuecomment-6983095731,
-# review by 2027-05-18: it also skips the commit links of the original repository ai-for-developers-project-386,
-# which release-please wrote into CHANGELOG.md up to 0.2.0. github.com answers them from Actions runners with 503
-# (lychee does not retry it), while they are immutable and open fine elsewhere; that repository's issue and PR links
-# are still checked.
+# https://github.com/sergdenisov/ai-for-developers-project-387/pull/28#issuecomment-6983095731 (the original
+# repository) and DECISION_LINK (this one), review by 2027-05-18: it also skips the commit links that release-please
+# writes into CHANGELOG.md at every release, of ai-for-developers-project-386 up to 0.2.0 and of this repository
+# since. github.com answers them from Actions runners with 503 (lychee does not retry it), while they are immutable
+# and open fine elsewhere; the issue and PR links of both repositories are still checked.
 [tasks."check:network"]
 description = "Checks that need the network: known vulnerabilities in lockfiles, broken links"
 run = [
   "osv-scanner scan source -r --config osv-scanner.toml .",
-  'lychee --no-progress --exclude-path frontend/index.html --exclude "^https://github\.com/sergdenisov/ai-for-developers-project-387/compare/v" --exclude "^https://github\.com/sergdenisov/ai-for-developers-project-386/commit/" .',
+  'lychee --no-progress --exclude-path frontend/index.html --exclude "^https://github\.com/sergdenisov/ai-for-developers-project-387/compare/v" --exclude "^https://github\.com/sergdenisov/ai-for-developers-project-38[67]/commit/" .',
 ]
 
 [tasks."check:contract"]
