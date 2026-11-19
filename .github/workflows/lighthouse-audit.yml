@@ -96,8 +96,9 @@ jobs:
                 | $r.audits[$ref.id] | select(.score != null and .score < 0.9)
                 | { key: .id, category: $category, weight: $ref.weight, score, title, description,
                     displayValue: (.displayValue // ""), url: $r.finalDisplayedUrl,
-                    items: ([.details.items[]? | {selector: .node.selector?, snippet: .node.snippet?,
-                      explanation: .node.explanation?}] | .[0:5]) } ]
+                    items: ([.details.items[]? | select(type == "object") | (.node // {}) as $node
+                      | {selector: $node.selector, snippet: $node.snippet, explanation: $node.explanation,
+                        url: .url, label: (.label // null)}] | .[0:5]) } ]
               | group_by(.key)
               | map(.[0] + {pages: (map(.url) | unique)} | del(.url))' \
               "$REPORTS"/*.report.json > "$REPORTS/findings.json"
@@ -137,8 +138,11 @@ jobs:
     env:
       INPUT: audit-input
     steps:
+      # The default branch, whatever branch a manual run picked: OpenCode loads opencode.json, plugins and AGENTS.md
+      # from here, next to the model key.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -151,7 +155,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue list --repo "$GITHUB_REPOSITORY" --label lighthouse --state all --limit 200 \
-            --json number,title,state,body,url,closedAt > "$INPUT/issues.json"
+            --json number,title,state,stateReason,body,url,closedAt > "$INPUT/issues.json"
           # The full HTML and JSON reports stay in the artifact; the model reads the summary.
           rm -f "$INPUT"/report/*.report.html "$INPUT"/report/*.report.json
 
@@ -192,7 +196,8 @@ jobs:
             → action "create"; an open issue tracks it and the report adds nothing new (same pages, same items) → no
             action; an open issue tracks it and something new appeared (another page, other elements) → action
             "comment" on that issue saying what is new; only closed issues track it → action "create" with
-            "reopens" set to the closed issue's number, the problem came back. A created issue is written in
+            "reopens" set to the closed issue's number, the problem came back; a closed issue whose stateReason is
+            NOT_PLANNED means a person decided not to fix it → no action. A created issue is written in
             Russian for a person who decides whether to take it into work: the problem in the user's words, the
             evidence (score, pages, elements), the proposed action, and that it comes from this run's report
             (link the run). Do not invent findings and do not create issues for anything outside findings.json.
@@ -289,9 +294,12 @@ jobs:
           elif [ "$ANALYZE" != success ] || [ ! -s decision/decision.json ]; then
             summary="**Нужен человек:** агент не дал решения (\`agent_failed\`), issues не создавались. Отчёт — в артефакте \`lighthouse-report\`."
           else
-            summary=$(jq -r .summary decision/decision.json)
-            existing=$(gh issue list --label lighthouse --state all --limit 200 --json number,state,body)
-            jq -c '.actions[]' decision/decision.json | while read -r action; do
+            existing=$(gh issue list --label lighthouse --state all --limit 200 --json number,state,stateReason,body)
+            # Text from the model quotes the pages: no finding markers of its own, no @-mentions.
+            clean() { sed -e 's/<!--[^>]*-->//g' -e 's/@\([A-Za-z0-9]\)/@\xE2\x80\x8B\1/g'; }
+            summary=$(jq -r .summary decision/decision.json | clean)
+            # Not a pipe into `while`: the loop runs in this shell, so `existing` it refreshes stays visible.
+            while read -r action; do
               type=$(jq -r .type <<< "$action")
               key=$(jq -r .key <<< "$action")
               # Only a finding that is in this run's report.
@@ -302,6 +310,8 @@ jobs:
               marker="<!-- lighthouse-finding: $key -->"
               open_issue=$(jq -r --arg m "$marker" 'map(select(.state == "OPEN" and (.body | contains($m))))
                 | .[0].number // empty' <<< "$existing")
+              not_planned=$(jq -r --arg m "$marker" 'map(select(.stateReason == "NOT_PLANNED"
+                and (.body | contains($m)))) | .[0].number // empty' <<< "$existing")
               body="$RUNNER_TEMP/body.md"
               if [ "$type" = create ]; then
                 if [ -n "$open_issue" ]; then
@@ -309,8 +319,12 @@ jobs:
                   echo "- дубль не создан: \`$key\` уже ведётся в #$open_issue" >> "$done_list"
                   continue
                 fi
+                if [ -n "$not_planned" ]; then
+                  echo "- не создан: \`$key\` закрыт как «не планируется» в #$not_planned" >> "$done_list"
+                  continue
+                fi
                 {
-                  jq -r .body <<< "$action"
+                  jq -r .body <<< "$action" | clean
                   reopens=$(jq -r '.reopens // empty' <<< "$action")
                   if [ -n "$reopens" ]; then echo; echo "Проблема вернулась после #$reopens."; fi
                   echo
@@ -319,20 +333,20 @@ jobs:
                   echo
                   echo "$marker"
                 } > "$body"
-                url=$(gh issue create --label lighthouse --title "$(jq -r .title <<< "$action" | cut -c1-200)" \
+                url=$(gh issue create --label lighthouse --title "$(jq -r .title <<< "$action" | clean | cut -c1-200)" \
                   --body-file "$body")
                 echo "- создан $url — \`$key\`" >> "$done_list"
-                existing=$(gh issue list --label lighthouse --state all --limit 200 --json number,state,body)
+                existing=$(gh issue list --label lighthouse --state all --limit 200 --json number,state,stateReason,body)
               elif [ "$type" = comment ]; then
                 if [ -z "$open_issue" ] || [ "$open_issue" != "$(jq -r .issue <<< "$action")" ]; then
                   echo "- пропущено: комментарий к \`$key\` не в открытый issue этой находки" >> "$done_list"
                   continue
                 fi
-                { jq -r .body <<< "$action"; echo; echo "Аудит Lighthouse: [прогон]($RUN_URL)."; } > "$body"
+                { jq -r .body <<< "$action" | clean; echo; echo "Аудит Lighthouse: [прогон]($RUN_URL)."; } > "$body"
                 gh issue comment "$open_issue" --body-file "$body" > /dev/null
                 echo "- дополнен #$open_issue — \`$key\`" >> "$done_list"
               fi
-            done
+            done < <(jq -c '.actions[]' decision/decision.json)
           fi
 
           [ -s "$done_list" ] || echo "- новых issue и комментариев нет" > "$done_list"
