@@ -74,8 +74,11 @@ jobs:
               --output-path="$REPORTS/$name" --chrome-flags="--headless=new --no-sandbox"
           done
 
-      # findings.json: each failing audit that counts towards a category score (weight > 0, score < 0.9), once per
-      # audit with the pages it fails on; the key of a finding is its Lighthouse audit id.
+      # findings.json: each failing audit that counts towards a category score (weight > 0), once per audit with the
+      # pages it fails on; the key of a finding is its Lighthouse audit id. Failing is below 0.9, and below 0.5 (red)
+      # for the performance metrics: on Render's free tier they swing from run to run, and every swing would file or
+      # extend an issue. Mantine's generated ids (`#mantine-…`) are cut from the elements: they change with every page
+      # load and would make the same element look new.
       - name: Summarize the reports
         id: summary
         shell: bash
@@ -93,11 +96,15 @@ jobs:
               "$REPORTS"/*.report.json > "$REPORTS/scores.json"
             jq -s '
               [ .[] | . as $r | .categories[] | .id as $category | .auditRefs[] | select(.weight > 0) | . as $ref
-                | $r.audits[$ref.id] | select(.score != null and .score < 0.9)
+                | $r.audits[$ref.id]
+                | select(.score != null and .score < (if $ref.group == "metrics" then 0.5 else 0.9 end))
                 | { key: .id, category: $category, weight: $ref.weight, score, title, description,
                     displayValue: (.displayValue // ""), url: $r.finalDisplayedUrl,
                     items: ([.details.items[]? | select(type == "object") | (.node // {}) as $node
-                      | {selector: $node.selector, snippet: $node.snippet, explanation: $node.explanation,
+                      | {selector: ($node.selector | if type == "string" then gsub("#mantine-[a-z0-9]+"; "") else . end),
+                        snippet: ($node.snippet | if type == "string" then gsub(" id=\"mantine-[a-z0-9]+\""; "")
+                          else . end),
+                        explanation: $node.explanation,
                         url: .url, label: (.label // null)}] | .[0:5]) } ]
               | group_by(.key)
               | map(.[0] + {pages: (map(.url) | unique), score: (map(.score) | min),
@@ -131,7 +138,8 @@ jobs:
     needs: collect
     if: needs.collect.outputs.status == 'ok'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The model takes up to 25 minutes, and one more turn up to 5: OpenCode Zen sometimes answers a step in minutes.
+    timeout-minutes: 35
     permissions:
       # opencode.json and AGENTS.md of main.
       contents: read
@@ -211,7 +219,7 @@ jobs:
         run: |
           set +e
           mkdir -p "$RUNNER_TEMP/decision"
-          timeout 15m opencode run --model "$MODEL" --variant "$VARIANT" --format json -- "$PROMPT" \
+          timeout 25m opencode run --model "$MODEL" --variant "$VARIANT" --format json -- "$PROMPT" \
             > "$RUNNER_TEMP/decision/events.jsonl"
           code=$?
           # The answer is the text of a last step that finished on its own; once, the same session is asked again.
