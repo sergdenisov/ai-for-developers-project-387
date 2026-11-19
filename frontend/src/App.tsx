@@ -14,6 +14,7 @@ import { EventTypePage } from './pages/EventTypePage.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { NotFoundPage } from './pages/NotFoundPage.tsx';
 import { createQueryClient } from './query-client.ts';
+import { cssVariablesResolver, theme } from './theme.ts';
 
 export function AppRoutes() {
   return (
@@ -33,7 +34,7 @@ const queryClient = createQueryClient();
 
 function App() {
   return (
-    <MantineProvider>
+    <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver}>
       <Notifications />
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
