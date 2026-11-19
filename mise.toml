@@ -89,9 +89,10 @@ run = "betterleaks git --redact --no-banner"
 # its release PR is merged.
 # Exception, human decision in
 # https://github.com/sergdenisov/ai-for-developers-project-387/pull/28#issuecomment-6983095731 (the original
-# repository) and DECISION_LINK (this one), review by 2027-05-18: it also skips the commit links that release-please
-# writes into CHANGELOG.md at every release, of ai-for-developers-project-386 up to 0.2.0 and of this repository
-# since. github.com answers them from Actions runners with 503 (lychee does not retry it), while they are immutable
+# repository) and
+# https://github.com/sergdenisov/ai-for-developers-project-387/pull/33#issuecomment-7007891454 (this one),
+# review by 2027-05-18: it also skips the commit links that release-please writes into CHANGELOG.md at every release,
+# of ai-for-developers-project-386 up to 0.2.0 and of this repository since. github.com answers them from Actions runners with 503 (lychee does not retry it), while they are immutable
 # and open fine elsewhere; the issue and PR links of both repositories are still checked.
 [tasks."check:network"]
 description = "Checks that need the network: known vulnerabilities in lockfiles, broken links"
