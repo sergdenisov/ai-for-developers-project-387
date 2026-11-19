@@ -67,7 +67,8 @@ Vite, Mantine) are separate npm packages; the root `package.json` holds reposito
 
 `.github/workflows/opencode.yml` runs OpenCode on a `/oc` or `/opencode` comment; your final message becomes the reply
 comment. `.github/workflows/opencode-triage.yml` triages a new issue automatically (labels and a comment, no code
-changes). On those runners:
+changes). `.github/workflows/lighthouse-audit.yml` asks you, without a shell, for a JSON decision on Lighthouse
+findings; a job without the model files the issues. On those runners:
 
 - `mise` tools are installed, npm dependencies are not: run `mise run install` before any check.
 - A push that touches `.github/workflows/` is rejected: the app has no `workflows` permission. Put such a change in your
