@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/sergdenisov/ai-for-developers-project-387/compare/v0.4.0...v0.4.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **frontend:** raise text and button contrast to WCAG AA ([#45](https://github.com/sergdenisov/ai-for-developers-project-387/issues/45)) ([77b2251](https://github.com/sergdenisov/ai-for-developers-project-387/commit/77b2251bc07e52d5ba083a233a19c9de23ad57f6))
+* **frontend:** raise text and button contrast to WCAG AA ([#46](https://github.com/sergdenisov/ai-for-developers-project-387/issues/46)) ([849b2eb](https://github.com/sergdenisov/ai-for-developers-project-387/commit/849b2eb54bfa55a6cf9d5fd9ea18ec5735e0b9e6))
+
 ## [0.4.0](https://github.com/sergdenisov/ai-for-developers-project-387/compare/v0.3.0...v0.4.0) (2026-11-19)
 
 
