@@ -115,11 +115,13 @@ jobs:
                   displayValue: (map(.displayValue) | unique | join("; ")),
                   items: (map(.items) | add | unique | .[0:10])} | del(.url))' \
               "$REPORTS"/*.report.json > "$REPORTS/findings.json"
-            # A fingerprint of each finding's elements tells a changed finding from the same one in another run; the
+            # A fingerprint of each finding's pages and elements tells a changed finding from the same one in another
+            # run (a score is left out: the metrics swing, binary audits score 0); the
             # model compared the report with its own prose in the issue and took an element it had left out for a new
             # one (#35).
             jq -c '.[]' "$REPORTS/findings.json" | while read -r finding; do
-              fingerprint=$(jq -c '[.items[] | .selector // .snippet // .label // ""] | sort | unique' <<< "$finding" \
+              fingerprint=$(jq -c '{pages, items: ([.items[] | .selector // .snippet // .label // ""] | sort | unique)}' \
+                <<< "$finding" \
                 | sha256sum | cut -c1-12)
               jq -c --arg fp "$fingerprint" '. + {fingerprint: $fp}' <<< "$finding"
             done | jq -s . > "$REPORTS/findings.tmp"
@@ -425,11 +427,19 @@ jobs:
           fi
 
           [ -s "$done_list" ] || echo "- новых issue и комментариев нет" > "$done_list"
+          # The scores and the performance metrics of each page, from the report itself, whatever the summary says.
+          scores=$(jq -r 'if length == 0 then "" else
+            "| Страница | Оценки | FCP | LCP | TBT | Speed Index | CLS |\n| --- | --- | --- | --- | --- | --- | --- |\n"
+            + (map("| \(.url) | " + (.scores | to_entries | map("\(.key) \(.value)") | join(", ")) + " | "
+              + ([.metrics["first-contentful-paint", "largest-contentful-paint", "total-blocking-time",
+                "speed-index", "cumulative-layout-shift"] | "\(.value) (\(.score))"] | join(" | ")) + " |")
+              | join("\n")) end' report/scores.json)
           {
             echo "### Прогон $(date -u +%Y-%m-%d) — \`$status\`"
             echo
             echo "$summary"
             echo
+            if [ -n "$scores" ]; then echo "**Оценки и метрики (из отчёта):**"; echo; printf '%s\n' "$scores"; echo; fi
             echo "**Действия:**"
             cat "$done_list"
             echo
