@@ -366,9 +366,12 @@ SHA и ссылку на логи:
 | [44515702077](https://github.com/sergdenisov/ai-for-developers-project-387/actions/runs/44515702077) | Первый аудит: три новые находки, агент создал [#35](https://github.com/sergdenisov/ai-for-developers-project-387/issues/35) (контраст текста), [#36](https://github.com/sergdenisov/ai-for-developers-project-387/issues/36) (FCP) и [#37](https://github.com/sergdenisov/ai-for-developers-project-387/issues/37) (нет meta description) |
 | [44516080556](https://github.com/sergdenisov/ai-for-developers-project-387/actions/runs/44516080556) | Повтор на тех же данных: дублей нет. Но агент дописал в #35 «новый» элемент, который на самом деле был уже в первом отчёте, и создал [#38](https://github.com/sergdenisov/ai-for-developers-project-387/issues/38) по TBT, колеблющемуся на бесплатном Render. Поэтому появились отпечаток элементов и порог 0.5 для метрик (#39) |
 | [44521945210](https://github.com/sergdenisov/ai-for-developers-project-387/actions/runs/44521945210) | Повтор после #39: новых issue и комментариев нет, #35 и #37 получили отпечаток, в журнале — таблица оценок и метрик |
+| [44528553356](https://github.com/sergdenisov/ai-for-developers-project-387/actions/runs/44528553356) | После деплоя #43 (обращение #37 → спецификация #41 → тикет #42): SEO 1 на `/` и `/book`, находки `meta-description` в отчёте нет — #37 закрыт как исправленный |
+| [44535536605](https://github.com/sergdenisov/ai-for-developers-project-387/actions/runs/44535536605) | После деплоя #47 (обращение #35 → спецификация #45 → тикет #46): доступность 1 на `/` и `/book`, находок в отчёте нет — #35 закрыт как исправленный |
 
 Находки — входящие обращения: брать ли их в работу, решает человек. #36 и #38 после #39 больше не находки (метрики
-выше красной зоны); их можно закрыть как «не планируется».
+выше красной зоны), они закрыты как «не планируется». #37 и #35 я взял в работу: каждый прошёл триаж, спецификацию,
+тикет, PR с авторевью, мерж и повторный аудит на проде, исправления вышли в релизах 0.4.0 и 0.4.1.
 
 ## Выводы о работе агента в GitHub
 
