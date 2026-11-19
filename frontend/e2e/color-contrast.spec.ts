@@ -10,6 +10,14 @@ async function waitForContent(page: Page, path: string) {
     return;
   }
 
+  if (path === '/admin') {
+    await expect(page.getByRole('heading', { level: 1, name: 'Админка' })).toBeVisible();
+    await expect(page.getByText('Сергей Денисов')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Новый тип события' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Название' })).toBeVisible();
+    return;
+  }
+
   // The list may be empty in a fresh store or hold Event Types created by earlier scenarios in this run.
   await expect(
     page
@@ -20,7 +28,7 @@ async function waitForContent(page: Page, path: string) {
 }
 
 test.describe('the text on the pages reaches WCAG AA contrast', () => {
-  for (const path of ['/', '/book']) {
+  for (const path of ['/', '/book', '/admin']) {
     test(`${path} has no color contrast violations`, async ({ page }) => {
       const response = await page.goto(path);
       expect(response?.ok()).toBe(true);
