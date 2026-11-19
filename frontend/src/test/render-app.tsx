@@ -6,13 +6,14 @@ import { MemoryRouter } from 'react-router';
 
 import { AppRoutes } from '../App.tsx';
 import { createQueryClient } from '../query-client.ts';
+import { cssVariablesResolver, theme } from '../theme.ts';
 
 /** Renders the app at `path` with a fresh query cache that retries like the app, only without delays. */
 export function renderApp(path: string) {
   const queryClient = createQueryClient({ retryDelay: 0 });
 
   return render(
-    <MantineProvider env="test">
+    <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver} env="test">
       <Notifications />
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[path]}>
